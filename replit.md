@@ -4,8 +4,9 @@
 
 MedicaidSleuth is a Medicaid provider spending analysis and fraud detection application. It serves as a "bounty hunter" dashboard that allows users to query Medicaid spending data, visualize billing trends, and automatically scan for fraud spikes (anomalous billing growth patterns). The app is inspired by real-world cases like the Minnesota autism billing scandal.
 
-The application has four main features:
-- **Dashboard** — Overview of total claims, providers, states, spending, and flagged alerts
+The application has five main features:
+- **Authentication** — User registration and login with secure password hashing (bcrypt) and session-based auth (express-session with PostgreSQL-backed sessions)
+- **Dashboard** — Overview of total claims, providers, states, spending, and flagged alerts (with logout button in header)
 - **Explorer** — Browse and filter providers by state and procedure code, with drill-down to individual provider detail pages
 - **Scanner** — Automated fraud detection that identifies providers with anomalous billing growth, categorized by severity (critical, high, medium)
 - **Plans** — Subscription pricing page with Stripe-powered checkout for Analyst ($29/mo) and Investigator ($79/mo) tiers
@@ -33,7 +34,8 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 | `app/(tabs)/scanner.tsx` | Scanner tab — fraud detection results with severity levels |
 | `app/provider/[id].tsx` | Provider detail screen — monthly billing trends and alerts |
 | `app/_layout.tsx` | Root layout with font loading, query client, gesture handler |
-| `components/` | Reusable components (ErrorBoundary, ErrorFallback, KeyboardAwareScrollView) |
+| `components/` | Reusable components (ErrorBoundary, ErrorFallback, AuthScreen, KeyboardAwareScrollView) |
+| `lib/auth.tsx` | AuthProvider context and useAuth hook for user authentication state |
 | `constants/colors.ts` | Dark theme color palette (the app uses a dark UI theme exclusively) |
 | `lib/query-client.ts` | TanStack Query setup with API request helpers |
 
@@ -43,7 +45,9 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 |------|---------|
 | `server/index.ts` | Express server setup, CORS, static file serving |
 | `server/routes.ts` | API route definitions with mock Medicaid claims data |
-| `server/storage.ts` | In-memory storage layer (currently MemStorage, designed for swap to DB) |
+| `server/auth.ts` | Authentication routes (register, login, logout, /api/user) and session setup |
+| `server/db.ts` | Drizzle ORM database connection pool |
+| `server/storage.ts` | Database-backed storage layer (DatabaseStorage using Drizzle + PostgreSQL) |
 | `server/stripeClient.ts` | Stripe client setup using Replit connection API for credentials |
 | `server/webhookHandlers.ts` | Stripe webhook processing via stripe-replit-sync |
 | `server/seed-products.ts` | Script to seed subscription products in Stripe |
@@ -51,9 +55,9 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 
 ### Data Layer
 
-- **Current state**: The backend uses in-memory mock data generated in `server/routes.ts` to simulate T-MSIS (Transformed Medicaid Statistical Information System) claims data. The mock data includes providers, procedure codes, states, and monthly billing totals.
-- **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) but currently only has a `users` table. The storage layer (`server/storage.ts`) uses an in-memory Map, not the database.
-- **Storage interface**: `IStorage` interface is defined to allow swapping between MemStorage and a database-backed implementation.
+- **Claims data**: The backend uses in-memory mock data generated in `server/routes.ts` to simulate T-MSIS (Transformed Medicaid Statistical Information System) claims data. The mock data includes providers, procedure codes, states, and monthly billing totals.
+- **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) with a `users` table for authentication. Sessions are stored in a `session` table (created automatically by connect-pg-simple).
+- **Storage interface**: `IStorage` interface with `DatabaseStorage` implementation using Drizzle ORM for user CRUD operations.
 
 ### Key Design Patterns
 
