@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Dimensions,
   TouchableOpacity,
+  Image,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
@@ -255,8 +256,12 @@ export default function DashboardScreen() {
         }
       >
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>MedicaidSleuth</Text>
+          <View style={styles.headerLeft}>
+            <Image
+              source={require("@/assets/images/logo.png")}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
             <Text style={styles.title}>Overview</Text>
           </View>
           <View style={styles.statusRow}>
@@ -413,13 +418,13 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 20,
   },
-  greeting: {
-    fontFamily: "DMSans_600SemiBold",
-    fontSize: 13,
-    color: C.tint,
-    letterSpacing: 1.5,
-    textTransform: "uppercase" as const,
-    marginBottom: 2,
+  headerLeft: {
+    flex: 1,
+  },
+  headerLogo: {
+    width: 160,
+    height: 28,
+    marginBottom: 4,
   },
   title: {
     fontFamily: "DMSans_700Bold",

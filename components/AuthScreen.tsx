@@ -9,6 +9,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   ScrollView,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -96,13 +97,11 @@ export default function AuthScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Animated.View entering={FadeIn.duration(600)} style={styles.logoSection}>
-            <View style={styles.logoContainer}>
-              <View style={styles.logoIconWrapper}>
-                <Ionicons name="shield-checkmark" size={32} color={C.tint} />
-              </View>
-              <View style={styles.logoPulseRing} />
-            </View>
-            <Text style={styles.appName}>MedicaidSleuth</Text>
+            <Image
+              source={require("@/assets/images/logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
             <Text style={styles.tagline}>Fraud Detection Intelligence</Text>
           </Animated.View>
 
@@ -241,36 +240,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 36,
   },
-  logoContainer: {
-    width: 72,
-    height: 72,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  logoIconWrapper: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: C.tintBg2,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.tint,
-  },
-  logoPulseRing: {
-    position: "absolute",
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 1,
-    borderColor: "rgba(0, 229, 204, 0.15)",
-  },
-  appName: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 28,
-    color: C.text,
-    letterSpacing: -0.5,
+  logoImage: {
+    width: 260,
+    height: 60,
+    marginBottom: 8,
   },
   tagline: {
     fontFamily: "DMSans_400Regular",
