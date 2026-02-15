@@ -98,7 +98,7 @@ export default function AuthScreen() {
         >
           <Animated.View entering={FadeIn.duration(600)} style={styles.logoSection}>
             <Image
-              source={require("@/assets/images/logo-transparent.png")}
+              source={require("@/assets/images/logo-dark.png")}
               style={styles.logoImage}
               resizeMode="contain"
             />

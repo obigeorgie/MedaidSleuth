@@ -258,7 +258,7 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Image
-              source={require("@/assets/images/logo-transparent.png")}
+              source={require("@/assets/images/logo-dark.png")}
               style={styles.headerLogo}
               resizeMode="contain"
             />
