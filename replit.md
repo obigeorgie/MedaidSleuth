@@ -4,10 +4,11 @@
 
 MedicaidSleuth is a Medicaid provider spending analysis and fraud detection application. It serves as a "bounty hunter" dashboard that allows users to query Medicaid spending data, visualize billing trends, and automatically scan for fraud spikes (anomalous billing growth patterns). The app is inspired by real-world cases like the Minnesota autism billing scandal.
 
-The application has three main features:
+The application has four main features:
 - **Dashboard** — Overview of total claims, providers, states, spending, and flagged alerts
 - **Explorer** — Browse and filter providers by state and procedure code, with drill-down to individual provider detail pages
 - **Scanner** — Automated fraud detection that identifies providers with anomalous billing growth, categorized by severity (critical, high, medium)
+- **Plans** — Subscription pricing page with Stripe-powered checkout for Analyst ($29/mo) and Investigator ($79/mo) tiers
 
 ## User Preferences
 
@@ -43,6 +44,9 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 | `server/index.ts` | Express server setup, CORS, static file serving |
 | `server/routes.ts` | API route definitions with mock Medicaid claims data |
 | `server/storage.ts` | In-memory storage layer (currently MemStorage, designed for swap to DB) |
+| `server/stripeClient.ts` | Stripe client setup using Replit connection API for credentials |
+| `server/webhookHandlers.ts` | Stripe webhook processing via stripe-replit-sync |
+| `server/seed-products.ts` | Script to seed subscription products in Stripe |
 | `server/templates/landing-page.html` | Landing page for non-web-app visitors |
 
 ### Data Layer
@@ -54,7 +58,7 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 ### Key Design Patterns
 
 - **File-based routing**: expo-router maps the `app/` directory to navigation routes
-- **Tab navigation**: Three main tabs (Dashboard, Explorer, Scanner) with a detail screen for providers
+- **Tab navigation**: Four main tabs (Dashboard, Explorer, Scanner, Plans) with a detail screen for providers
 - **API pattern**: Frontend uses TanStack React Query to fetch from the Express backend. API base URL is derived from `EXPO_PUBLIC_DOMAIN` environment variable.
 - **Color system**: Single dark color theme defined in `constants/colors.ts` — deep space navy (#060D1B) background, vivid cyan (#00E5CC) accent, coral danger (#FF4D6A), amber warning (#FFB020), electric blue (#4C7CFF) secondary accent. The app does NOT use light/dark mode switching, it's always dark themed
 - **Animations**: Uses react-native-reanimated for entry animations (FadeIn, FadeInDown, spring animations), animated progress bars, pulsing scan rings, and animated bar charts
