@@ -1,5 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { sql } from "drizzle-orm";
 
 interface Claim {
   provider_id: string;
@@ -418,6 +420,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
     );
     res.json(codes);
+  });
+
+  // --- Stripe payment routes ---
+
+  app.get("/api/stripe/publishable-key", async (_req: Request, res: Response) => {
+    try {
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (error: any) {
+      console.error("Error getting publishable key:", error.message);
+      res.status(500).json({ error: "Failed to get Stripe publishable key" });
+    }
+  });
+
+  app.get("/api/stripe/products", async (_req: Request, res: Response) => {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const products = await stripe.products.list({ active: true, limit: 10 });
+      const prices = await stripe.prices.list({ active: true, limit: 50 });
+
+      const productsWithPrices = products.data.map((product) => {
+        const productPrices = prices.data.filter((p) => p.product === product.id);
+        return {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          metadata: product.metadata,
+          prices: productPrices.map((p) => ({
+            id: p.id,
+            unit_amount: p.unit_amount,
+            currency: p.currency,
+            recurring: p.recurring,
+          })),
+        };
+      });
+
+      res.json({ data: productsWithPrices });
+    } catch (error: any) {
+      console.error("Error listing products:", error.message);
+      res.status(500).json({ error: "Failed to list products" });
+    }
+  });
+
+  app.post("/api/stripe/checkout", async (req: Request, res: Response) => {
+    try {
+      const { priceId } = req.body;
+      if (!priceId) {
+        return res.status(400).json({ error: "priceId is required" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+
+      const forwardedProto = req.header("x-forwarded-proto") || req.protocol || "https";
+      const forwardedHost = req.header("x-forwarded-host") || req.get("host");
+      const baseUrl = `${forwardedProto}://${forwardedHost}`;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: "subscription",
+        success_url: `${baseUrl}/api/stripe/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/api/stripe/checkout/cancel`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("Error creating checkout session:", error.message);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  app.get("/api/stripe/checkout/success", (_req: Request, res: Response) => {
+    res.send(`
+      <html>
+        <head><title>Payment Successful</title></head>
+        <body style="font-family: system-ui; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #060D1B; color: #F0F4FA; margin: 0;">
+          <div style="text-align: center; padding: 40px;">
+            <div style="font-size: 64px; margin-bottom: 16px;">&#10003;</div>
+            <h1 style="color: #00E5CC; margin-bottom: 8px;">Payment Successful</h1>
+            <p style="color: #8E9AB5;">Your subscription is now active. You can close this window and return to the app.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  });
+
+  app.get("/api/stripe/checkout/cancel", (_req: Request, res: Response) => {
+    res.send(`
+      <html>
+        <head><title>Payment Cancelled</title></head>
+        <body style="font-family: system-ui; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #060D1B; color: #F0F4FA; margin: 0;">
+          <div style="text-align: center; padding: 40px;">
+            <div style="font-size: 64px; margin-bottom: 16px;">&#10007;</div>
+            <h1 style="color: #FF4D6A; margin-bottom: 8px;">Payment Cancelled</h1>
+            <p style="color: #8E9AB5;">No charges were made. You can close this window and return to the app.</p>
+          </div>
+        </body>
+      </html>
+    `);
   });
 
   const httpServer = createServer(app);
