@@ -4,11 +4,12 @@
 
 MedicaidSleuth is a Medicaid provider spending analysis and fraud detection application. It serves as a "bounty hunter" dashboard that allows users to query Medicaid spending data, visualize billing trends, and automatically scan for fraud spikes (anomalous billing growth patterns). The app is inspired by real-world cases like the Minnesota autism billing scandal.
 
-The application has five main features:
+The application has six main features:
 - **Authentication** — User registration and login with secure password hashing (bcrypt) and session-based auth (express-session with PostgreSQL-backed sessions)
 - **Dashboard** — Overview of total claims, providers, states, spending, and flagged alerts (with logout button in header)
 - **Explorer** — Browse and filter providers by state and procedure code, with drill-down to individual provider detail pages
 - **Scanner** — Automated fraud detection that identifies providers with anomalous billing growth, categorized by severity (critical, high, medium)
+- **Assistant** — AI-powered fraud analysis assistant (Sleuth AI) using OpenRouter via Replit AI Integrations. Supports streaming chat, conversation history, and Medicaid-specific system prompt
 - **Plans** — Subscription pricing page with Stripe-powered checkout for Analyst ($29/mo) and Investigator ($79/mo) tiers
 
 ## User Preferences
@@ -32,6 +33,7 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 | `app/(tabs)/index.tsx` | Dashboard tab — stats overview and top fraud alerts |
 | `app/(tabs)/explorer.tsx` | Explorer tab — provider listing with state/procedure filters |
 | `app/(tabs)/scanner.tsx` | Scanner tab — fraud detection results with severity levels |
+| `app/(tabs)/assistant.tsx` | Assistant tab — AI chat interface for fraud analysis |
 | `app/provider/[id].tsx` | Provider detail screen — monthly billing trends and alerts |
 | `app/_layout.tsx` | Root layout with font loading, query client, gesture handler |
 | `components/` | Reusable components (ErrorBoundary, ErrorFallback, AuthScreen, KeyboardAwareScrollView) |
@@ -51,18 +53,19 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 | `server/stripeClient.ts` | Stripe client setup using Replit connection API for credentials |
 | `server/webhookHandlers.ts` | Stripe webhook processing via stripe-replit-sync |
 | `server/seed-products.ts` | Script to seed subscription products in Stripe |
+| `server/replit_integrations/chat/` | AI chat routes and storage (OpenRouter via Replit AI Integrations) |
 | `server/templates/landing-page.html` | Landing page for non-web-app visitors |
 
 ### Data Layer
 
 - **Claims data**: The backend uses in-memory mock data generated in `server/routes.ts` to simulate T-MSIS (Transformed Medicaid Statistical Information System) claims data. The mock data includes providers, procedure codes, states, and monthly billing totals.
-- **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) with a `users` table for authentication. Sessions are stored in a `session` table (created automatically by connect-pg-simple).
+- **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) with `users`, `conversations`, and `messages` tables. Sessions are stored in a `session` table (created automatically by connect-pg-simple).
 - **Storage interface**: `IStorage` interface with `DatabaseStorage` implementation using Drizzle ORM for user CRUD operations.
 
 ### Key Design Patterns
 
 - **File-based routing**: expo-router maps the `app/` directory to navigation routes
-- **Tab navigation**: Four main tabs (Dashboard, Explorer, Scanner, Plans) with a detail screen for providers
+- **Tab navigation**: Five main tabs (Dashboard, Explorer, Scanner, Assistant, Plans) with a detail screen for providers
 - **API pattern**: Frontend uses TanStack React Query to fetch from the Express backend. API base URL is derived from `EXPO_PUBLIC_DOMAIN` environment variable.
 - **Color system**: Single dark color theme defined in `constants/colors.ts` — deep space navy (#060D1B) background, vivid cyan (#00E5CC) accent, coral danger (#FF4D6A), amber warning (#FFB020), electric blue (#4C7CFF) secondary accent. The app does NOT use light/dark mode switching, it's always dark themed
 - **Animations**: Uses react-native-reanimated for entry animations (FadeIn, FadeInDown, spring animations), animated progress bars, pulsing scan rings, and animated bar charts
@@ -94,7 +97,9 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 - **zod** + **drizzle-zod** — Schema validation
 
 ### Environment Variables
-- `DATABASE_URL` — PostgreSQL connection string (required for drizzle-kit, optional at runtime since storage is in-memory)
+- `DATABASE_URL` — PostgreSQL connection string (required for drizzle-kit and chat storage)
 - `EXPO_PUBLIC_DOMAIN` — Domain for API requests from the frontend
 - `REPLIT_DEV_DOMAIN` — Replit development domain (auto-set by Replit)
 - `REPLIT_DOMAINS` — Replit deployment domains for CORS (auto-set by Replit)
+- `AI_INTEGRATIONS_OPENROUTER_BASE_URL` — OpenRouter API base URL (auto-set by Replit AI Integrations)
+- `AI_INTEGRATIONS_OPENROUTER_API_KEY` — OpenRouter API key (auto-set by Replit AI Integrations)
