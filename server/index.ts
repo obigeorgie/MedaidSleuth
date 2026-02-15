@@ -1,6 +1,7 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { setupAuth } from "./auth";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
@@ -284,6 +285,8 @@ function setupErrorHandler(app: express.Application) {
     }),
   );
   app.use(express.urlencoded({ extended: false }));
+
+  setupAuth(app);
 
   setupRequestLogging(app);
   configureExpoAndLanding(app);

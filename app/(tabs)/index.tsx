@@ -9,6 +9,7 @@ import {
   Platform,
   RefreshControl,
   Dimensions,
+  TouchableOpacity,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
@@ -25,6 +26,7 @@ import Animated, {
   FadeIn,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
+import { useAuth } from "@/lib/auth";
 
 const C = Colors.light;
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -211,6 +213,7 @@ function AlertRow({ alert, index }: { alert: FraudAlert; index: number }) {
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const { user, logout } = useAuth();
 
   const statsQuery = useQuery<Stats>({ queryKey: ["/api/stats"] });
   const scanQuery = useQuery<FraudAlert[]>({ queryKey: ["/api/scan"] });
@@ -261,6 +264,13 @@ export default function DashboardScreen() {
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>LIVE</Text>
             </View>
+            <TouchableOpacity
+              onPress={logout}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              testID="logout-button"
+            >
+              <Ionicons name="log-out-outline" size={22} color={C.textSecondary} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -419,6 +429,9 @@ const styles = StyleSheet.create({
   },
   statusRow: {
     marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   liveBadge: {
     flexDirection: "row",
