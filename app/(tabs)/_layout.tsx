@@ -24,6 +24,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "exclamationmark.shield", selected: "exclamationmark.shield.fill" }} />
         <Label>Scanner</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="plans">
+        <Icon sf={{ default: "creditcard", selected: "creditcard.fill" }} />
+        <Label>Plans</Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
@@ -87,6 +91,15 @@ function ClassicTabLayout() {
           title: "Scanner",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="shield-checkmark" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="plans"
+        options={{
+          title: "Plans",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="card" size={size} color={color} />
           ),
         }}
       />
