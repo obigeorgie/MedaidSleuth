@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,17 +9,24 @@ import {
   FlatList,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withSequence,
   withTiming,
+  withRepeat,
+  withDelay,
+  Easing,
+  FadeIn,
+  FadeInDown,
+  cancelAnimation,
 } from "react-native-reanimated";
 
 const C = Colors.light;
@@ -49,23 +56,133 @@ function formatMonth(m: string): string {
   return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
-function SeverityBadge({ severity }: { severity: string }) {
-  const config = {
-    critical: { bg: C.dangerBg, color: C.danger, label: "CRITICAL" },
-    high: { bg: C.warningBg, color: C.warning, label: "HIGH" },
-    medium: { bg: "rgba(59,130,246,0.12)", color: C.accent, label: "MEDIUM" },
-  }[severity] || { bg: C.successBg, color: C.success, label: "LOW" };
+function PulsingRing({ delay, size }: { delay: number; size: number }) {
+  const scale = useSharedValue(0.3);
+  const opacity = useSharedValue(0.6);
+
+  useEffect(() => {
+    scale.value = withDelay(
+      delay,
+      withRepeat(
+        withTiming(1, { duration: 2000, easing: Easing.out(Easing.cubic) }),
+        -1,
+        false
+      )
+    );
+    opacity.value = withDelay(
+      delay,
+      withRepeat(
+        withTiming(0, { duration: 2000, easing: Easing.out(Easing.cubic) }),
+        -1,
+        false
+      )
+    );
+
+    return () => {
+      cancelAnimation(scale);
+      cancelAnimation(opacity);
+    };
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
 
   return (
-    <View style={[styles.severityBadge, { backgroundColor: config.bg }]}>
-      <Text style={[styles.severityText, { color: config.color }]}>
-        {config.label}
-      </Text>
+    <Animated.View
+      style={[
+        {
+          position: "absolute",
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: 2,
+          borderColor: C.tint,
+        },
+        animStyle,
+      ]}
+    />
+  );
+}
+
+function ScanAnimation() {
+  return (
+    <View style={scanStyles.container}>
+      <PulsingRing delay={0} size={120} />
+      <PulsingRing delay={600} size={120} />
+      <PulsingRing delay={1200} size={120} />
+      <View style={scanStyles.centerDot}>
+        <Ionicons name="shield-checkmark" size={24} color={C.tint} />
+      </View>
     </View>
   );
 }
 
-function AlertCard({ alert }: { alert: FraudAlert }) {
+function ThreatMeter({ alerts }: { alerts: FraudAlert[] }) {
+  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
+  const highCount = alerts.filter((a) => a.severity === "high").length;
+  const total = alerts.length;
+  const threatScore = total > 0
+    ? Math.min(100, (criticalCount * 40 + highCount * 25 + (total - criticalCount - highCount) * 10))
+    : 0;
+
+  const threatLabel = threatScore >= 60 ? "HIGH RISK" : threatScore >= 30 ? "MODERATE" : "LOW";
+  const threatColor = threatScore >= 60 ? C.danger : threatScore >= 30 ? C.warning : C.success;
+
+  const barWidth = useSharedValue(0);
+
+  useEffect(() => {
+    barWidth.value = withDelay(
+      200,
+      withTiming(threatScore / 100, { duration: 1000, easing: Easing.out(Easing.cubic) })
+    );
+  }, [threatScore]);
+
+  const barStyle = useAnimatedStyle(() => ({
+    width: `${barWidth.value * 100}%` as unknown as number,
+  }));
+
+  return (
+    <Animated.View entering={FadeIn.duration(400)} style={scanStyles.meterContainer}>
+      <View style={scanStyles.meterHeader}>
+        <Text style={scanStyles.meterTitle}>Threat Assessment</Text>
+        <View style={[scanStyles.meterBadge, { backgroundColor: threatColor + "18" }]}>
+          <Text style={[scanStyles.meterBadgeText, { color: threatColor }]}>
+            {threatLabel}
+          </Text>
+        </View>
+      </View>
+      <View style={scanStyles.meterBarTrack}>
+        <Animated.View
+          style={[
+            scanStyles.meterBarFill,
+            barStyle,
+            { backgroundColor: threatColor },
+          ]}
+        />
+      </View>
+      <View style={scanStyles.meterStats}>
+        <View style={scanStyles.meterStat}>
+          <View style={[scanStyles.meterStatDot, { backgroundColor: C.danger }]} />
+          <Text style={scanStyles.meterStatText}>{criticalCount} Critical</Text>
+        </View>
+        <View style={scanStyles.meterStat}>
+          <View style={[scanStyles.meterStatDot, { backgroundColor: C.warning }]} />
+          <Text style={scanStyles.meterStatText}>{highCount} High</Text>
+        </View>
+        <View style={scanStyles.meterStat}>
+          <View style={[scanStyles.meterStatDot, { backgroundColor: C.accent }]} />
+          <Text style={scanStyles.meterStatText}>
+            {total - criticalCount - highCount} Medium
+          </Text>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+function AlertCard({ alert, index }: { alert: FraudAlert; index: number }) {
   const severityColor =
     alert.severity === "critical"
       ? C.danger
@@ -73,75 +190,105 @@ function AlertCard({ alert }: { alert: FraudAlert }) {
         ? C.warning
         : C.accent;
 
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.alertCard,
-        { opacity: pressed ? 0.7 : 1 },
-      ]}
-      onPress={() => {
-        if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-        router.push({
-          pathname: "/provider/[id]",
-          params: { id: alert.provider_id },
-        });
-      }}
-    >
-      <View style={styles.alertCardHeader}>
-        <View
-          style={[styles.alertIndicator, { backgroundColor: severityColor }]}
-        />
-        <View style={styles.alertCardInfo}>
-          <Text style={styles.alertCardName} numberOfLines={1}>
-            {alert.provider_name}
-          </Text>
-          <View style={styles.alertCardMeta}>
-            <Text style={styles.alertCardMetaText}>
-              {alert.state_name}
-            </Text>
-            <Text style={styles.alertCardDot}>|</Text>
-            <Text style={styles.alertCardMetaText}>
-              {alert.procedure_desc}
-            </Text>
-          </View>
-        </View>
-        <SeverityBadge severity={alert.severity} />
-      </View>
+  const severityLabel =
+    alert.severity === "critical"
+      ? "CRITICAL"
+      : alert.severity === "high"
+        ? "HIGH"
+        : "MEDIUM";
 
-      <View style={styles.alertCardBody}>
-        <View style={styles.alertStat}>
-          <Text style={styles.alertStatLabel}>Month</Text>
-          <Text style={styles.alertStatValue}>{formatMonth(alert.month)}</Text>
-        </View>
-        <View style={styles.alertStat}>
-          <Text style={styles.alertStatLabel}>Previous</Text>
-          <Text style={styles.alertStatValue}>
-            {formatCurrency(alert.prev_month_total)}
-          </Text>
-        </View>
-        <View style={styles.alertStat}>
-          <Text style={styles.alertStatLabel}>Current</Text>
-          <Text style={[styles.alertStatValue, { color: severityColor }]}>
-            {formatCurrency(alert.monthly_total)}
-          </Text>
-        </View>
-        <View style={styles.alertStat}>
-          <Text style={styles.alertStatLabel}>Growth</Text>
-          <View style={styles.growthRow}>
-            <Ionicons name="trending-up" size={13} color={severityColor} />
-            <Text style={[styles.alertStatValue, { color: severityColor }]}>
-              {alert.growth_percent.toFixed(0)}%
+  return (
+    <Animated.View entering={FadeInDown.delay(100 + index * 70).duration(350)}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.alertCard,
+          pressed && { opacity: 0.7 },
+        ]}
+        onPress={() => {
+          if (Platform.OS !== "web") {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+          router.push({
+            pathname: "/provider/[id]",
+            params: { id: alert.provider_id },
+          });
+        }}
+      >
+        <View style={[styles.alertStripe, { backgroundColor: severityColor }]} />
+        <View style={styles.alertBody}>
+          <View style={styles.alertHeader}>
+            <View style={styles.alertHeaderLeft}>
+              <Text style={styles.alertName} numberOfLines={1}>
+                {alert.provider_name}
+              </Text>
+              <Text style={styles.alertProcedure} numberOfLines={1}>
+                {alert.procedure_desc}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.severityBadge,
+                { backgroundColor: severityColor + "18" },
+              ]}
+            >
+              <Text style={[styles.severityText, { color: severityColor }]}>
+                {severityLabel}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.alertDataRow}>
+            <View style={styles.alertDataItem}>
+              <Text style={styles.alertDataLabel}>Location</Text>
+              <Text style={styles.alertDataValue}>{alert.state_name}</Text>
+            </View>
+            <View style={styles.alertDataItem}>
+              <Text style={styles.alertDataLabel}>Period</Text>
+              <Text style={styles.alertDataValue}>
+                {formatMonth(alert.month)}
+              </Text>
+            </View>
+            <View style={styles.alertDataItem}>
+              <Text style={styles.alertDataLabel}>Billed</Text>
+              <Text style={[styles.alertDataValue, { color: severityColor }]}>
+                {formatCurrency(alert.monthly_total)}
+              </Text>
+            </View>
+            <View style={styles.alertDataItem}>
+              <Text style={styles.alertDataLabel}>Growth</Text>
+              <View style={styles.alertGrowthRow}>
+                <Ionicons name="arrow-up" size={11} color={severityColor} />
+                <Text
+                  style={[styles.alertDataValue, { color: severityColor }]}
+                >
+                  {alert.growth_percent.toFixed(0)}%
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.alertCompare}>
+            <Text style={styles.alertCompareText}>
+              Previous: {formatCurrency(alert.prev_month_total)}
+            </Text>
+            <Ionicons name="arrow-forward" size={12} color={C.textMuted} />
+            <Text style={[styles.alertCompareText, { color: severityColor }]}>
+              Current: {formatCurrency(alert.monthly_total)}
             </Text>
           </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
-function ScanButton({ onPress, scanning }: { onPress: () => void; scanning: boolean }) {
+function ScanButton({
+  onPress,
+  scanning,
+}: {
+  onPress: () => void;
+  scanning: boolean;
+}) {
   const scale = useSharedValue(1);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -158,17 +305,75 @@ function ScanButton({ onPress, scanning }: { onPress: () => void; scanning: bool
 
   return (
     <Pressable onPress={handlePress} disabled={scanning}>
-      <Animated.View style={[styles.scanButton, animStyle]}>
-        {scanning ? (
-          <ActivityIndicator size="small" color={C.background} />
-        ) : (
-          <Ionicons name="shield-checkmark" size={20} color={C.background} />
-        )}
-        <Text style={styles.scanButtonText}>
-          {scanning ? "Scanning..." : "Run Anomaly Scan"}
-        </Text>
+      <Animated.View style={animStyle}>
+        <LinearGradient
+          colors={[C.tint, C.tintDim]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.scanButton}
+        >
+          {scanning ? (
+            <ActivityIndicator size="small" color={C.textInverse} />
+          ) : (
+            <Ionicons
+              name="shield-checkmark"
+              size={20}
+              color={C.textInverse}
+            />
+          )}
+          <Text style={styles.scanButtonText}>
+            {scanning ? "Scanning..." : "Run Anomaly Scan"}
+          </Text>
+        </LinearGradient>
       </Animated.View>
     </Pressable>
+  );
+}
+
+function SeverityFilter({
+  filter,
+  setFilter,
+  alerts,
+}: {
+  filter: string | null;
+  setFilter: (f: string | null) => void;
+  alerts: FraudAlert[];
+}) {
+  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
+  const highCount = alerts.filter((a) => a.severity === "high").length;
+  const mediumCount = alerts.filter((a) => a.severity === "medium").length;
+
+  const items: { key: string | null; label: string; count: number; color: string }[] = [
+    { key: null, label: "All", count: alerts.length, color: C.tint },
+    { key: "critical", label: "Critical", count: criticalCount, color: C.danger },
+    { key: "high", label: "High", count: highCount, color: C.warning },
+    { key: "medium", label: "Medium", count: mediumCount, color: C.accent },
+  ];
+
+  return (
+    <View style={styles.filterRow}>
+      {items.map((item) => (
+        <Pressable
+          key={item.key ?? "all"}
+          style={[
+            styles.filterItem,
+            filter === item.key && styles.filterItemActive,
+            filter === item.key && { borderColor: item.color + "40" },
+          ]}
+          onPress={() => setFilter(filter === item.key ? null : item.key)}
+        >
+          <Text
+            style={[
+              styles.filterCount,
+              { color: filter === item.key ? item.color : C.text },
+            ]}
+          >
+            {item.count}
+          </Text>
+          <Text style={styles.filterLabel}>{item.label}</Text>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -177,6 +382,7 @@ export default function ScannerScreen() {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const [hasScanned, setHasScanned] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [filterSeverity, setFilterSeverity] = useState<string | null>(null);
 
   const scanQuery = useQuery<FraudAlert[]>({
     queryKey: ["/api/scan"],
@@ -184,12 +390,6 @@ export default function ScannerScreen() {
   });
 
   const alerts = scanQuery.data || [];
-  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
-  const highCount = alerts.filter((a) => a.severity === "high").length;
-  const mediumCount = alerts.filter((a) => a.severity === "medium").length;
-
-  const [filterSeverity, setFilterSeverity] = useState<string | null>(null);
-
   const filteredAlerts = filterSeverity
     ? alerts.filter((a) => a.severity === filterSeverity)
     : alerts;
@@ -199,7 +399,7 @@ export default function ScannerScreen() {
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise((r) => setTimeout(r, 1800));
     setHasScanned(true);
     await scanQuery.refetch();
     setScanning(false);
@@ -208,122 +408,63 @@ export default function ScannerScreen() {
     }
   };
 
-  const renderAlert = ({ item }: { item: FraudAlert }) => (
-    <AlertCard alert={item} />
+  const renderAlert = ({ item, index }: { item: FraudAlert; index: number }) => (
+    <AlertCard alert={item} index={index} />
+  );
+
+  const ListHeader = () => (
+    <>
+      {hasScanned && !scanning && alerts.length > 0 && (
+        <>
+          <ThreatMeter alerts={alerts} />
+          <SeverityFilter
+            filter={filterSeverity}
+            setFilter={setFilterSeverity}
+            alerts={alerts}
+          />
+        </>
+      )}
+    </>
   );
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerArea, { paddingTop: topInset + 16 }]}>
-        <Text style={styles.headerLabel}>Fraud Detection</Text>
-        <Text style={styles.headerTitle}>Anomaly Scanner</Text>
+      <View style={[styles.headerArea, { paddingTop: topInset + 12 }]}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerLabel}>Fraud Detection</Text>
+            <Text style={styles.headerTitle}>Anomaly Scanner</Text>
+          </View>
+          {hasScanned && !scanning && alerts.length > 0 && (
+            <View style={styles.alertCountBadge}>
+              <Text style={styles.alertCountText}>{alerts.length}</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.headerDesc}>
-          Detects month-over-month billing spikes exceeding 200% growth
-          thresholds across all monitored providers.
+          Detects billing spikes exceeding 200% month-over-month growth across
+          all monitored providers.
         </Text>
         <ScanButton onPress={handleScan} scanning={scanning} />
       </View>
 
-      {hasScanned && !scanning && alerts.length > 0 && (
-        <View style={styles.summaryBar}>
-          <Pressable
-            style={[
-              styles.summaryItem,
-              filterSeverity === null && styles.summaryItemActive,
-            ]}
-            onPress={() => setFilterSeverity(null)}
-          >
-            <Text
-              style={[
-                styles.summaryCount,
-                filterSeverity === null && { color: C.tint },
-              ]}
-            >
-              {alerts.length}
-            </Text>
-            <Text style={styles.summaryLabel}>All</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.summaryItem,
-              filterSeverity === "critical" && styles.summaryItemActive,
-            ]}
-            onPress={() =>
-              setFilterSeverity(filterSeverity === "critical" ? null : "critical")
-            }
-          >
-            <Text
-              style={[
-                styles.summaryCount,
-                { color: C.danger },
-              ]}
-            >
-              {criticalCount}
-            </Text>
-            <Text style={styles.summaryLabel}>Critical</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.summaryItem,
-              filterSeverity === "high" && styles.summaryItemActive,
-            ]}
-            onPress={() =>
-              setFilterSeverity(filterSeverity === "high" ? null : "high")
-            }
-          >
-            <Text
-              style={[
-                styles.summaryCount,
-                { color: C.warning },
-              ]}
-            >
-              {highCount}
-            </Text>
-            <Text style={styles.summaryLabel}>High</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.summaryItem,
-              filterSeverity === "medium" && styles.summaryItemActive,
-            ]}
-            onPress={() =>
-              setFilterSeverity(filterSeverity === "medium" ? null : "medium")
-            }
-          >
-            <Text
-              style={[
-                styles.summaryCount,
-                { color: C.accent },
-              ]}
-            >
-              {mediumCount}
-            </Text>
-            <Text style={styles.summaryLabel}>Medium</Text>
-          </Pressable>
-        </View>
-      )}
-
       {!hasScanned && !scanning && (
         <View style={styles.emptyState}>
-          <MaterialCommunityIcons
-            name="shield-search"
-            size={56}
-            color={C.textMuted}
-          />
+          <ScanAnimation />
           <Text style={styles.emptyTitle}>Ready to Scan</Text>
           <Text style={styles.emptyDesc}>
-            Tap the button above to analyze all provider billing data for
-            suspicious activity patterns.
+            Tap the button above to analyze provider billing data for suspicious
+            activity patterns.
           </Text>
         </View>
       )}
 
       {scanning && (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color={C.tint} />
+          <ScanAnimation />
           <Text style={styles.emptyTitle}>Analyzing Patterns</Text>
           <Text style={styles.emptyDesc}>
-            Cross-referencing billing data across providers and procedure
+            Cross-referencing billing data across all providers and procedure
             codes...
           </Text>
         </View>
@@ -333,9 +474,8 @@ export default function ScannerScreen() {
         <FlatList
           data={filteredAlerts}
           renderItem={renderAlert}
-          keyExtractor={(item, i) =>
-            `${item.provider_id}-${item.month}-${i}`
-          }
+          keyExtractor={(item, i) => `${item.provider_id}-${item.month}-${i}`}
+          ListHeaderComponent={ListHeader}
           contentContainerStyle={{
             paddingHorizontal: 20,
             paddingTop: 8,
@@ -344,14 +484,10 @@ export default function ScannerScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons
-                name="checkmark-circle"
-                size={40}
-                color={C.success}
-              />
+              <Ionicons name="checkmark-circle" size={44} color={C.success} />
               <Text style={styles.emptyTitle}>No Anomalies</Text>
               <Text style={styles.emptyDesc}>
-                No billing anomalies match this filter.
+                No anomalies match this severity filter.
               </Text>
             </View>
           }
@@ -360,6 +496,83 @@ export default function ScannerScreen() {
     </View>
   );
 }
+
+const scanStyles = StyleSheet.create({
+  container: {
+    width: 120,
+    height: 120,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  centerDot: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: C.tintBg2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  meterContainer: {
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  meterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  meterTitle: {
+    fontFamily: "DMSans_600SemiBold",
+    fontSize: 15,
+    color: C.text,
+  },
+  meterBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  meterBadgeText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 10,
+    letterSpacing: 1,
+  },
+  meterBarTrack: {
+    height: 8,
+    backgroundColor: C.border,
+    borderRadius: 4,
+    overflow: "hidden",
+    marginBottom: 14,
+  },
+  meterBarFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  meterStats: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  meterStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  meterStatDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  meterStatText: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 12,
+    color: C.textSecondary,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -372,116 +585,128 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
   headerLabel: {
-    fontFamily: "DMSans_500Medium",
+    fontFamily: "DMSans_600SemiBold",
     fontSize: 13,
     color: C.danger,
     textTransform: "uppercase" as const,
-    letterSpacing: 1.2,
-    marginBottom: 4,
+    letterSpacing: 1.5,
+    marginBottom: 2,
   },
   headerTitle: {
     fontFamily: "DMSans_700Bold",
     fontSize: 28,
     color: C.text,
+    letterSpacing: -0.5,
     marginBottom: 8,
+  },
+  alertCountBadge: {
+    backgroundColor: C.dangerBg,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  alertCountText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 15,
+    color: C.danger,
   },
   headerDesc: {
     fontFamily: "DMSans_400Regular",
     fontSize: 13,
     color: C.textSecondary,
     lineHeight: 19,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   scanButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: C.tint,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     gap: 10,
   },
   scanButtonText: {
-    fontFamily: "DMSans_600SemiBold",
+    fontFamily: "DMSans_700Bold",
     fontSize: 15,
-    color: C.background,
+    color: C.textInverse,
   },
-  summaryBar: {
+
+  filterRow: {
     flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
     gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    marginBottom: 16,
   },
-  summaryItem: {
+  filterItem: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
   },
-  summaryItemActive: {
-    borderColor: C.tint,
+  filterItemActive: {
+    backgroundColor: C.surfaceElevated,
   },
-  summaryCount: {
+  filterCount: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 18,
+    fontSize: 17,
     color: C.text,
   },
-  summaryLabel: {
+  filterLabel: {
     fontFamily: "DMSans_400Regular",
     fontSize: 10,
     color: C.textMuted,
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
+    marginTop: 2,
   },
+
   alertCard: {
+    flexDirection: "row",
     backgroundColor: C.surface,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 16,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: C.border,
+    overflow: "hidden",
   },
-  alertCardHeader: {
+  alertStripe: {
+    width: 4,
+  },
+  alertBody: {
+    flex: 1,
+    padding: 16,
+  },
+  alertHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 14,
   },
-  alertIndicator: {
-    width: 4,
-    height: 32,
-    borderRadius: 2,
-    marginRight: 12,
-  },
-  alertCardInfo: {
+  alertHeaderLeft: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 10,
   },
-  alertCardName: {
+  alertName: {
     fontFamily: "DMSans_600SemiBold",
     fontSize: 15,
     color: C.text,
     marginBottom: 3,
   },
-  alertCardMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  alertCardMetaText: {
+  alertProcedure: {
     fontFamily: "DMSans_400Regular",
     fontSize: 11,
     color: C.textMuted,
-  },
-  alertCardDot: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 11,
-    color: C.textMuted,
-    marginHorizontal: 6,
   },
   severityBadge: {
     paddingHorizontal: 8,
@@ -489,45 +714,56 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   severityText: {
-    fontFamily: "DMSans_600SemiBold",
+    fontFamily: "DMSans_700Bold",
     fontSize: 9,
     letterSpacing: 0.8,
   },
-  alertCardBody: {
+  alertDataRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    paddingTop: 12,
+    marginBottom: 12,
   },
-  alertStat: {
-    alignItems: "center",
+  alertDataItem: {
+    gap: 3,
   },
-  alertStatLabel: {
+  alertDataLabel: {
     fontFamily: "DMSans_400Regular",
     fontSize: 10,
     color: C.textMuted,
-    marginBottom: 3,
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
-  alertStatValue: {
+  alertDataValue: {
     fontFamily: "DMSans_600SemiBold",
-    fontSize: 13,
+    fontSize: 12,
     color: C.text,
   },
-  growthRow: {
+  alertGrowthRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 2,
   },
+  alertCompare: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: C.background,
+    padding: 10,
+    borderRadius: 8,
+  },
+  alertCompareText: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+  },
+
   emptyState: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
+    paddingVertical: 50,
     paddingHorizontal: 40,
-    gap: 12,
+    gap: 8,
   },
   emptyTitle: {
     fontFamily: "DMSans_600SemiBold",

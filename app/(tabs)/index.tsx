@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  Dimensions,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
@@ -15,8 +16,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Colors from "@/constants/colors";
 import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+  FadeIn,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 
 const C = Colors.light;
+const { width: SCREEN_W } = Dimensions.get("window");
 
 interface Stats {
   totalClaims: number;
@@ -50,76 +61,150 @@ function formatMonth(m: string): string {
   return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
 }
 
-function StatCard({
-  icon,
-  iconColor,
-  label,
-  value,
-  bgColor,
-}: {
-  icon: React.ReactNode;
-  iconColor: string;
-  label: string;
-  value: string;
-  bgColor: string;
-}) {
+function RiskBar({ flagged, total }: { flagged: number; total: number }) {
+  const ratio = total > 0 ? flagged / total : 0;
+  const barWidth = useSharedValue(0);
+
+  useEffect(() => {
+    barWidth.value = withDelay(400, withTiming(ratio, { duration: 800, easing: Easing.out(Easing.cubic) }));
+  }, [ratio]);
+
+  const animBarStyle = useAnimatedStyle(() => ({
+    width: `${barWidth.value * 100}%` as unknown as number,
+  }));
+
   return (
-    <View style={[styles.statCard, { backgroundColor: bgColor }]}>
-      <View style={styles.statIconWrap}>{icon}</View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={styles.riskBarContainer}>
+      <View style={styles.riskBarTrack}>
+        <Animated.View style={[styles.riskBarFill, animBarStyle]} />
+      </View>
+      <View style={styles.riskBarLabels}>
+        <Text style={styles.riskBarText}>
+          {flagged} flagged of {total} providers
+        </Text>
+        <Text style={[styles.riskBarText, { color: C.danger }]}>
+          {(ratio * 100).toFixed(0)}% risk
+        </Text>
+      </View>
     </View>
   );
 }
 
-function AlertRow({ alert }: { alert: FraudAlert }) {
+function AnimatedStatCard({
+  icon,
+  label,
+  value,
+  accentColor,
+  delay,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  accentColor: string;
+  delay: number;
+}) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(16);
+
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
+    translateY.value = withDelay(delay, withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.statCard, animStyle]}>
+      <View style={[styles.statAccent, { backgroundColor: accentColor }]} />
+      <View style={styles.statIconRow}>
+        {icon}
+        <Text style={styles.statValue}>{value}</Text>
+      </View>
+      <Text style={styles.statLabel}>{label}</Text>
+    </Animated.View>
+  );
+}
+
+function AlertRow({ alert, index }: { alert: FraudAlert; index: number }) {
   const severityColor =
     alert.severity === "critical"
       ? C.danger
       : alert.severity === "high"
         ? C.warning
         : C.accent;
-  const severityBg =
+  const severityLabel =
     alert.severity === "critical"
-      ? C.dangerBg
+      ? "CRIT"
       : alert.severity === "high"
-        ? C.warningBg
-        : C.successBg;
+        ? "HIGH"
+        : "MED";
 
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.alertRow,
-        { opacity: pressed ? 0.7 : 1 },
-      ]}
-      onPress={() =>
-        router.push({
-          pathname: "/provider/[id]",
-          params: { id: alert.provider_id },
-        })
-      }
-    >
-      <View style={[styles.severityDot, { backgroundColor: severityColor }]} />
-      <View style={styles.alertContent}>
-        <Text style={styles.alertName} numberOfLines={1}>
-          {alert.provider_name}
-        </Text>
-        <Text style={styles.alertMeta}>
-          {alert.state_code} | {alert.procedure_code} | {formatMonth(alert.month)}
-        </Text>
-      </View>
-      <View style={styles.alertRight}>
-        <View style={[styles.growthBadge, { backgroundColor: severityBg }]}>
-          <Ionicons name="trending-up" size={12} color={severityColor} />
-          <Text style={[styles.growthText, { color: severityColor }]}>
-            +{alert.growth_percent.toFixed(0)}%
+    <Animated.View entering={FadeIn.delay(200 + index * 80).duration(400)}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.alertRow,
+          pressed && { opacity: 0.7 },
+        ]}
+        onPress={() => {
+          if (Platform.OS !== "web") {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+          router.push({
+            pathname: "/provider/[id]",
+            params: { id: alert.provider_id },
+          });
+        }}
+      >
+        <View style={styles.alertLeft}>
+          <View
+            style={[styles.severityStripe, { backgroundColor: severityColor }]}
+          />
+          <View style={styles.alertContent}>
+            <Text style={styles.alertName} numberOfLines={1}>
+              {alert.provider_name}
+            </Text>
+            <View style={styles.alertMetaRow}>
+              <View style={styles.alertMetaChip}>
+                <Text style={styles.alertMetaChipText}>{alert.state_code}</Text>
+              </View>
+              <View style={styles.alertMetaChip}>
+                <Text style={styles.alertMetaChipText}>
+                  {alert.procedure_code}
+                </Text>
+              </View>
+              <Text style={styles.alertMetaDate}>
+                {formatMonth(alert.month)}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.alertRight}>
+          <View
+            style={[
+              styles.severityBadge,
+              { backgroundColor: severityColor + "18" },
+            ]}
+          >
+            <Text style={[styles.severityBadgeText, { color: severityColor }]}>
+              {severityLabel}
+            </Text>
+          </View>
+          <View style={styles.growthContainer}>
+            <Ionicons name="arrow-up" size={11} color={severityColor} />
+            <Text style={[styles.growthPct, { color: severityColor }]}>
+              {alert.growth_percent.toFixed(0)}%
+            </Text>
+          </View>
+          <Text style={styles.alertAmount}>
+            {formatCurrency(alert.monthly_total)}
           </Text>
         </View>
-        <Text style={styles.alertAmount}>
-          {formatCurrency(alert.monthly_total)}
-        </Text>
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -127,13 +212,8 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
-  const statsQuery = useQuery<Stats>({
-    queryKey: ["/api/stats"],
-  });
-
-  const scanQuery = useQuery<FraudAlert[]>({
-    queryKey: ["/api/scan"],
-  });
+  const statsQuery = useQuery<Stats>({ queryKey: ["/api/stats"] });
+  const scanQuery = useQuery<FraudAlert[]>({ queryKey: ["/api/scan"] });
 
   const isLoading = statsQuery.isLoading || scanQuery.isLoading;
   const stats = statsQuery.data;
@@ -157,7 +237,10 @@ export default function DashboardScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: topInset + 16, paddingBottom: Platform.OS === "web" ? 84 + 34 : 100 },
+          {
+            paddingTop: topInset + 12,
+            paddingBottom: Platform.OS === "web" ? 84 + 34 : 100,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -170,91 +253,130 @@ export default function DashboardScreen() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Medicaid Intelligence</Text>
-            <Text style={styles.title}>Dashboard</Text>
+            <Text style={styles.greeting}>MedicaidSleuth</Text>
+            <Text style={styles.title}>Overview</Text>
           </View>
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>LIVE</Text>
+          <View style={styles.statusRow}>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
           </View>
         </View>
 
         {stats && (
           <LinearGradient
-            colors={["rgba(0,212,170,0.08)", "rgba(59,130,246,0.06)"]}
+            colors={[C.gradient2, C.gradient1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.spendBanner}
+            style={styles.heroCard}
           >
-            <Text style={styles.spendLabel}>Total Monitored Spend</Text>
-            <Text style={styles.spendValue}>
+            <View style={styles.heroGlowTop} />
+            <Text style={styles.heroLabel}>Total Monitored Spend</Text>
+            <Text style={styles.heroValue}>
               {formatCurrency(stats.totalSpend)}
             </Text>
-            <Text style={styles.spendSub}>
-              Across {stats.totalStates} states, {stats.totalClaims} claims
-            </Text>
+            <View style={styles.heroMeta}>
+              <View style={styles.heroMetaItem}>
+                <View
+                  style={[styles.heroMetaDot, { backgroundColor: C.tint }]}
+                />
+                <Text style={styles.heroMetaText}>
+                  {stats.totalStates} States
+                </Text>
+              </View>
+              <View style={styles.heroMetaItem}>
+                <View
+                  style={[styles.heroMetaDot, { backgroundColor: C.accent }]}
+                />
+                <Text style={styles.heroMetaText}>
+                  {stats.totalClaims} Claims
+                </Text>
+              </View>
+              <View style={styles.heroMetaItem}>
+                <View
+                  style={[styles.heroMetaDot, { backgroundColor: C.danger }]}
+                />
+                <Text style={styles.heroMetaText}>
+                  {stats.totalAlerts} Alerts
+                </Text>
+              </View>
+            </View>
+            <RiskBar
+              flagged={stats.flaggedProviders}
+              total={stats.totalProviders}
+            />
           </LinearGradient>
         )}
 
         {stats && (
           <View style={styles.statsGrid}>
-            <StatCard
+            <AnimatedStatCard
               icon={
                 <MaterialCommunityIcons
                   name="hospital-building"
-                  size={20}
+                  size={18}
                   color={C.accent}
                 />
               }
-              iconColor={C.accent}
               label="Providers"
               value={stats.totalProviders.toString()}
-              bgColor={C.surface}
+              accentColor={C.accent}
+              delay={100}
             />
-            <StatCard
-              icon={
-                <Ionicons name="shield-checkmark" size={20} color={C.tint} />
-              }
-              iconColor={C.tint}
-              label="Monitored"
+            <AnimatedStatCard
+              icon={<Ionicons name="document-text" size={18} color={C.tint} />}
+              label="Claims"
               value={stats.totalClaims.toString()}
-              bgColor={C.surface}
+              accentColor={C.tint}
+              delay={200}
             />
-            <StatCard
-              icon={
-                <Ionicons name="warning" size={20} color={C.danger} />
-              }
-              iconColor={C.danger}
+            <AnimatedStatCard
+              icon={<Ionicons name="flag" size={18} color={C.danger} />}
               label="Flagged"
               value={stats.flaggedProviders.toString()}
-              bgColor={C.surface}
+              accentColor={C.danger}
+              delay={300}
             />
-            <StatCard
+            <AnimatedStatCard
               icon={
-                <Feather name="alert-triangle" size={20} color={C.warning} />
+                <Feather name="alert-triangle" size={18} color={C.warning} />
               }
-              iconColor={C.warning}
               label="Alerts"
               value={stats.totalAlerts.toString()}
-              bgColor={C.surface}
+              accentColor={C.warning}
+              delay={400}
             />
           </View>
         )}
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Anomalies</Text>
-          <Pressable onPress={() => router.push("/(tabs)/scanner")}>
-            <Text style={styles.seeAll}>See All</Text>
+          <View style={styles.sectionTitleRow}>
+            <View
+              style={[styles.sectionDot, { backgroundColor: C.danger }]}
+            />
+            <Text style={styles.sectionTitle}>Top Anomalies</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push("/(tabs)/scanner")}
+            style={styles.seeAllBtn}
+          >
+            <Text style={styles.seeAll}>View All</Text>
+            <Feather name="arrow-right" size={14} color={C.tint} />
           </Pressable>
         </View>
 
         {alerts.slice(0, 5).map((alert, i) => (
-          <AlertRow key={`${alert.provider_id}-${alert.month}-${i}`} alert={alert} />
+          <AlertRow
+            key={`${alert.provider_id}-${alert.month}-${i}`}
+            alert={alert}
+            index={i}
+          />
         ))}
 
         {alerts.length === 0 && (
           <View style={styles.emptyState}>
-            <Ionicons name="checkmark-circle" size={40} color={C.success} />
+            <Ionicons name="checkmark-circle" size={44} color={C.success} />
             <Text style={styles.emptyText}>No anomalies detected</Text>
           </View>
         )}
@@ -279,20 +401,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   greeting: {
-    fontFamily: "DMSans_500Medium",
+    fontFamily: "DMSans_600SemiBold",
     fontSize: 13,
     color: C.tint,
+    letterSpacing: 1.5,
     textTransform: "uppercase" as const,
-    letterSpacing: 1.2,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   title: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 28,
+    fontSize: 30,
     color: C.text,
+    letterSpacing: -0.5,
+  },
+  statusRow: {
+    marginTop: 8,
   },
   liveBadge: {
     flexDirection: "row",
@@ -300,9 +426,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.successBg,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 12,
+    borderRadius: 20,
     gap: 6,
-    marginTop: 8,
   },
   liveDot: {
     width: 6,
@@ -311,39 +436,93 @@ const styles = StyleSheet.create({
     backgroundColor: C.success,
   },
   liveText: {
-    fontFamily: "DMSans_600SemiBold",
-    fontSize: 10,
+    fontFamily: "DMSans_700Bold",
+    fontSize: 9,
     color: C.success,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
-  spendBanner: {
-    borderRadius: 16,
+
+  heroCard: {
+    borderRadius: 20,
     padding: 24,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.borderLight,
+    overflow: "hidden",
   },
-  spendLabel: {
+  heroGlowTop: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: C.tintBg2,
+  },
+  heroLabel: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 13,
+    fontSize: 12,
     color: C.textSecondary,
-    marginBottom: 6,
+    textTransform: "uppercase" as const,
+    letterSpacing: 1,
+    marginBottom: 8,
   },
-  spendValue: {
+  heroValue: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 36,
+    fontSize: 40,
     color: C.text,
-    marginBottom: 4,
+    letterSpacing: -1,
+    marginBottom: 16,
   },
-  spendSub: {
+  heroMeta: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 18,
+  },
+  heroMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  heroMetaDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  heroMetaText: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 13,
+    fontSize: 12,
+    color: C.textSecondary,
+  },
+
+  riskBarContainer: {
+    gap: 8,
+  },
+  riskBarTrack: {
+    height: 6,
+    backgroundColor: C.border,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  riskBarFill: {
+    height: "100%",
+    backgroundColor: C.danger,
+    borderRadius: 3,
+  },
+  riskBarLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  riskBarText: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 11,
     color: C.textMuted,
   },
+
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
     marginBottom: 28,
   },
   statCard: {
@@ -351,54 +530,96 @@ const styles = StyleSheet.create({
     minWidth: "45%" as unknown as number,
     borderRadius: 14,
     padding: 16,
+    backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
+    overflow: "hidden",
   },
-  statIconWrap: {
-    marginBottom: 12,
+  statAccent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: 3,
+    height: "100%",
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
+  statIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   statValue: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 22,
+    fontSize: 24,
     color: C.text,
-    marginBottom: 2,
+    letterSpacing: -0.5,
   },
   statLabel: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 12,
-    color: C.textSecondary,
+    fontSize: 11,
+    color: C.textMuted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.8,
   },
+
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 14,
   },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   sectionTitle: {
     fontFamily: "DMSans_600SemiBold",
-    fontSize: 18,
+    fontSize: 17,
     color: C.text,
+  },
+  seeAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   seeAll: {
     fontFamily: "DMSans_500Medium",
     fontSize: 13,
     color: C.tint,
   },
+
   alertRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: C.surface,
     borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
+    paddingVertical: 14,
+    paddingRight: 14,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: C.border,
+    overflow: "hidden",
   },
-  severityDot: {
+  alertLeft: {
+    flexDirection: "row",
+    flex: 1,
+    alignItems: "center",
+  },
+  severityStripe: {
     width: 4,
-    height: 36,
-    borderRadius: 2,
-    marginRight: 12,
+    height: 48,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+    marginRight: 14,
   },
   alertContent: {
     flex: 1,
@@ -408,34 +629,60 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_600SemiBold",
     fontSize: 14,
     color: C.text,
-    marginBottom: 3,
+    marginBottom: 6,
   },
-  alertMeta: {
+  alertMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  alertMetaChip: {
+    backgroundColor: C.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  alertMetaChipText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 10,
+    color: C.textSecondary,
+    letterSpacing: 0.3,
+  },
+  alertMetaDate: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 11,
+    fontSize: 10,
     color: C.textMuted,
   },
   alertRight: {
     alignItems: "flex-end",
     gap: 4,
   },
-  growthBadge: {
+  severityBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  severityBadgeText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 9,
+    letterSpacing: 0.8,
+  },
+  growthContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    gap: 3,
+    gap: 2,
   },
-  growthText: {
-    fontFamily: "DMSans_600SemiBold",
-    fontSize: 11,
+  growthPct: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 14,
+    letterSpacing: -0.3,
   },
   alertAmount: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 12,
-    color: C.textSecondary,
+    fontFamily: "DMSans_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
   },
+
   emptyState: {
     alignItems: "center",
     paddingVertical: 40,

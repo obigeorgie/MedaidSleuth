@@ -7,6 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import Colors from "@/constants/colors";
 
+const C = Colors.light;
+
 function NativeTabLayout() {
   return (
     <NativeTabs>
@@ -34,20 +36,20 @@ function ClassicTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.light.tint,
-        tabBarInactiveTintColor: Colors.light.tabIconDefault,
+        tabBarActiveTintColor: C.tint,
+        tabBarInactiveTintColor: C.tabIconDefault,
         tabBarStyle: {
           position: "absolute" as const,
-          backgroundColor: isIOS ? "transparent" : Colors.light.background,
+          backgroundColor: isIOS ? "transparent" : C.background,
           borderTopWidth: isWeb ? 1 : 0,
-          borderTopColor: Colors.light.border,
+          borderTopColor: C.border,
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),
         },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
-              intensity={100}
+              intensity={80}
               tint="dark"
               style={StyleSheet.absoluteFill}
             />
@@ -55,7 +57,7 @@ function ClassicTabLayout() {
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: Colors.light.background },
+                { backgroundColor: C.background, borderTopWidth: 1, borderTopColor: C.border },
               ]}
             />
           ) : null,

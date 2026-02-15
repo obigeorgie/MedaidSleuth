@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,9 +10,20 @@ import {
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, router } from "expo-router";
-import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
+import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withDelay,
+  withTiming,
+  Easing,
+  FadeIn,
+  FadeInDown,
+} from "react-native-reanimated";
 
 const C = Colors.light;
 
@@ -66,33 +77,71 @@ function formatMonthFull(m: string): string {
   return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-function MiniBarChart({ data }: { data: MonthlyTotal[] }) {
+function AnimatedBar({
+  height,
+  color,
+  label,
+  amount,
+  index,
+  maxHeight,
+}: {
+  height: number;
+  color: string;
+  label: string;
+  amount: string;
+  index: number;
+  maxHeight: number;
+}) {
+  const animHeight = useSharedValue(0);
+
+  useEffect(() => {
+    animHeight.value = withDelay(
+      index * 50,
+      withTiming(height, { duration: 600, easing: Easing.out(Easing.cubic) })
+    );
+  }, [height]);
+
+  const barStyle = useAnimatedStyle(() => ({
+    height: animHeight.value,
+  }));
+
+  return (
+    <View style={chartStyles.barCol}>
+      <Text style={chartStyles.barAmount}>{amount}</Text>
+      <Animated.View style={[chartStyles.bar, barStyle, { backgroundColor: color }]} />
+      <Text style={chartStyles.barLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function SpendChart({ data }: { data: MonthlyTotal[] }) {
   if (data.length === 0) return null;
   const maxVal = Math.max(...data.map((d) => d.total));
+  const chartHeight = 130;
 
   return (
     <View style={chartStyles.container}>
+      <View style={chartStyles.gridLines}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={chartStyles.gridLine} />
+        ))}
+      </View>
       <View style={chartStyles.bars}>
         {data.map((d, i) => {
-          const height = maxVal > 0 ? (d.total / maxVal) * 120 : 0;
-          const isAnomaly = i > 0 && data[i - 1].total > 0
-            ? ((d.total - data[i - 1].total) / data[i - 1].total) > 2
-            : false;
-
+          const h = maxVal > 0 ? (d.total / maxVal) * chartHeight : 0;
+          const prevTotal = i > 0 ? data[i - 1].total : d.total;
+          const isAnomaly =
+            i > 0 && prevTotal > 0 ? (d.total - prevTotal) / prevTotal > 2 : false;
           return (
-            <View key={d.month} style={chartStyles.barCol}>
-              <View
-                style={[
-                  chartStyles.bar,
-                  {
-                    height,
-                    backgroundColor: isAnomaly ? C.danger : C.tint,
-                    opacity: isAnomaly ? 1 : 0.7,
-                  },
-                ]}
-              />
-              <Text style={chartStyles.barLabel}>{formatMonth(d.month)}</Text>
-            </View>
+            <AnimatedBar
+              key={d.month}
+              height={h}
+              color={isAnomaly ? C.danger : C.tint}
+              label={formatMonth(d.month)}
+              amount={formatCurrency(d.total)}
+              index={i}
+              maxHeight={chartHeight}
+            />
           );
         })}
       </View>
@@ -100,61 +149,53 @@ function MiniBarChart({ data }: { data: MonthlyTotal[] }) {
   );
 }
 
-function GrowthTimeline({ data }: { data: GrowthData[] }) {
-  return (
-    <View style={timelineStyles.container}>
-      {data.map((d, i) => {
-        const isAnomaly = d.growth > 200;
-        const color = isAnomaly
-          ? d.growth > 1000
-            ? C.danger
-            : d.growth > 500
-              ? C.warning
-              : C.accent
-          : C.success;
+function GrowthItem({ data, index, isLast }: { data: GrowthData; index: number; isLast: boolean }) {
+  const isAnomaly = data.growth > 200;
+  const color = isAnomaly
+    ? data.growth > 1000
+      ? C.danger
+      : data.growth > 500
+        ? C.warning
+        : C.accent
+    : C.success;
 
-        return (
-          <View key={d.month} style={timelineStyles.row}>
-            <View style={timelineStyles.left}>
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 40).duration(300)}>
+      <View style={timelineStyles.row}>
+        <View style={timelineStyles.left}>
+          <View style={[timelineStyles.dot, { backgroundColor: color }]} />
+          {!isLast && <View style={timelineStyles.line} />}
+        </View>
+        <View style={timelineStyles.content}>
+          <View style={timelineStyles.contentHeader}>
+            <Text style={timelineStyles.month}>
+              {formatMonthFull(data.month)}
+            </Text>
+            {isAnomaly && (
               <View
-                style={[timelineStyles.dot, { backgroundColor: color }]}
-              />
-              {i < data.length - 1 && (
-                <View style={timelineStyles.line} />
-              )}
-            </View>
-            <View style={timelineStyles.content}>
-              <Text style={timelineStyles.month}>
-                {formatMonthFull(d.month)}
-              </Text>
-              <View style={timelineStyles.growthWrap}>
-                <Ionicons
-                  name={d.growth >= 0 ? "trending-up" : "trending-down"}
-                  size={14}
-                  color={color}
-                />
-                <Text style={[timelineStyles.growthVal, { color }]}>
-                  {d.growth >= 0 ? "+" : ""}
-                  {d.growth.toFixed(1)}%
+                style={[timelineStyles.flagBadge, { backgroundColor: color + "18" }]}
+              >
+                <Ionicons name="warning" size={10} color={color} />
+                <Text style={[timelineStyles.flagText, { color }]}>
+                  ANOMALY
                 </Text>
-                {isAnomaly && (
-                  <View
-                    style={[
-                      timelineStyles.flagBadge,
-                      { backgroundColor: color + "20" },
-                    ]}
-                  >
-                    <Text style={[timelineStyles.flagText, { color }]}>
-                      ANOMALY
-                    </Text>
-                  </View>
-                )}
               </View>
-            </View>
+            )}
           </View>
-        );
-      })}
-    </View>
+          <View style={timelineStyles.growthWrap}>
+            <Ionicons
+              name={data.growth >= 0 ? "trending-up" : "trending-down"}
+              size={14}
+              color={color}
+            />
+            <Text style={[timelineStyles.growthVal, { color }]}>
+              {data.growth >= 0 ? "+" : ""}
+              {data.growth.toFixed(1)}%
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -181,7 +222,7 @@ export default function ProviderDetailScreen() {
   if (!provider) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Ionicons name="alert-circle" size={40} color={C.danger} />
+        <Ionicons name="alert-circle" size={44} color={C.danger} />
         <Text style={styles.errorText}>Provider not found</Text>
         <Pressable onPress={() => router.back()}>
           <Text style={styles.backLink}>Go Back</Text>
@@ -189,6 +230,11 @@ export default function ProviderDetailScreen() {
       </View>
     );
   }
+
+  const avgSpend =
+    provider.monthlyTotals.length > 0
+      ? provider.totalSpend / provider.monthlyTotals.length
+      : 0;
 
   return (
     <View style={styles.container}>
@@ -198,12 +244,12 @@ export default function ProviderDetailScreen() {
           style={styles.backButton}
           hitSlop={12}
         >
-          <Ionicons name="chevron-back" size={24} color={C.text} />
+          <Ionicons name="chevron-back" size={22} color={C.text} />
         </Pressable>
         <Text style={styles.topBarTitle} numberOfLines={1}>
           Provider Details
         </Text>
-        <View style={{ width: 32 }} />
+        <View style={{ width: 36 }} />
       </View>
 
       <ScrollView
@@ -213,43 +259,53 @@ export default function ProviderDetailScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.profileSection}>
-          <View style={styles.profileIcon}>
-            <MaterialCommunityIcons
-              name="hospital-building"
-              size={28}
-              color={C.tint}
-            />
-          </View>
-          <Text style={styles.providerName}>{provider.name}</Text>
-          <Text style={styles.providerId}>{provider.id}</Text>
+        <Animated.View entering={FadeIn.duration(400)}>
+          <LinearGradient
+            colors={[C.gradient2, C.gradient1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.profileCard}
+          >
+            {provider.isFlagged && (
+              <View style={styles.flaggedCorner}>
+                <Ionicons name="warning" size={12} color={C.danger} />
+              </View>
+            )}
 
-          {provider.isFlagged && (
-            <View style={styles.flaggedBanner}>
-              <Ionicons name="warning" size={16} color={C.danger} />
-              <Text style={styles.flaggedText}>
-                Flagged for anomalous billing
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoItem}>
-              <Ionicons
-                name="location-outline"
-                size={14}
-                color={C.textMuted}
+            <View style={styles.profileAvatar}>
+              <MaterialCommunityIcons
+                name="hospital-building"
+                size={26}
+                color={provider.isFlagged ? C.danger : C.tint}
               />
-              <Text style={styles.infoText}>{provider.state_name}</Text>
             </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="medkit-outline" size={14} color={C.textMuted} />
-              <Text style={styles.infoText}>
-                {provider.procedure_code} - {provider.procedure_desc}
-              </Text>
+
+            <Text style={styles.providerName}>{provider.name}</Text>
+
+            <View style={styles.providerIdRow}>
+              <Text style={styles.providerId}>{provider.id}</Text>
+              {provider.isFlagged && (
+                <View style={styles.flaggedPill}>
+                  <Ionicons name="warning" size={10} color={C.danger} />
+                  <Text style={styles.flaggedPillText}>FLAGGED</Text>
+                </View>
+              )}
             </View>
-          </View>
-        </View>
+
+            <View style={styles.providerInfoChips}>
+              <View style={styles.infoChip}>
+                <Ionicons name="location" size={12} color={C.tint} />
+                <Text style={styles.infoChipText}>{provider.state_name}</Text>
+              </View>
+              <View style={styles.infoChip}>
+                <Ionicons name="medkit" size={12} color={C.tint} />
+                <Text style={styles.infoChipText}>
+                  {provider.procedure_code}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </Animated.View>
 
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
@@ -259,7 +315,11 @@ export default function ProviderDetailScreen() {
             </Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statBoxLabel}>Total Claims</Text>
+            <Text style={styles.statBoxLabel}>Avg/Month</Text>
+            <Text style={styles.statBoxValue}>{formatCurrency(avgSpend)}</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statBoxLabel}>Claims</Text>
             <Text style={styles.statBoxValue}>{provider.claimCount}</Text>
           </View>
           <View style={styles.statBox}>
@@ -276,55 +336,122 @@ export default function ProviderDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Monthly Spending</Text>
-          <View style={styles.chartCard}>
-            <MiniBarChart data={provider.monthlyTotals} />
+          <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionDot, { backgroundColor: C.tint }]} />
+            <Text style={styles.sectionTitle}>Monthly Spending</Text>
           </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Growth Timeline</Text>
-          {provider.growthData.length > 0 ? (
-            <GrowthTimeline data={provider.growthData} />
-          ) : (
-            <Text style={styles.noData}>No growth data available</Text>
-          )}
+          <View style={styles.chartCard}>
+            <SpendChart data={provider.monthlyTotals} />
+          </View>
         </View>
 
         {provider.fraudAlerts.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: C.danger }]}>
-              Fraud Alerts
-            </Text>
+            <View style={styles.sectionHeaderRow}>
+              <View
+                style={[styles.sectionDot, { backgroundColor: C.danger }]}
+              />
+              <Text style={[styles.sectionTitle, { color: C.danger }]}>
+                Fraud Alerts
+              </Text>
+            </View>
             {provider.fraudAlerts.map((alert, i) => (
-              <View key={i} style={styles.fraudAlertCard}>
-                <View style={styles.fraudAlertRow}>
-                  <Ionicons name="warning" size={16} color={C.danger} />
-                  <Text style={styles.fraudAlertMonth}>
-                    {formatMonthFull(alert.month)}
+              <Animated.View
+                key={i}
+                entering={FadeInDown.delay(i * 60).duration(300)}
+              >
+                <View style={styles.fraudAlertCard}>
+                  <View style={styles.fraudAlertLeft}>
+                    <View style={styles.fraudIconWrap}>
+                      <Ionicons name="warning" size={16} color={C.danger} />
+                    </View>
+                    <View>
+                      <Text style={styles.fraudAlertMonth}>
+                        {formatMonthFull(alert.month)}
+                      </Text>
+                      <Text style={styles.fraudAlertGrowth}>
+                        +{alert.growth_percent.toFixed(0)}% growth
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.fraudAlertAmount}>
+                    {formatCurrency(alert.monthly_total)}
                   </Text>
                 </View>
-                <Text style={styles.fraudAlertGrowth}>
-                  +{alert.growth_percent.toFixed(0)}% growth to{" "}
-                  {formatCurrency(alert.monthly_total)}
-                </Text>
-              </View>
+              </Animated.View>
             ))}
           </View>
         )}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Monthly Breakdown</Text>
-          {provider.monthlyTotals.map((m) => (
-            <View key={m.month} style={styles.breakdownRow}>
-              <Text style={styles.breakdownMonth}>
-                {formatMonthFull(m.month)}
-              </Text>
-              <Text style={styles.breakdownAmount}>
-                {formatCurrency(m.total)}
-              </Text>
+          <View style={styles.sectionHeaderRow}>
+            <View
+              style={[styles.sectionDot, { backgroundColor: C.accent }]}
+            />
+            <Text style={styles.sectionTitle}>Growth Timeline</Text>
+          </View>
+          {provider.growthData.length > 0 ? (
+            <View style={timelineStyles.container}>
+              {provider.growthData.map((d, i) => (
+                <GrowthItem
+                  key={d.month}
+                  data={d}
+                  index={i}
+                  isLast={i === provider.growthData.length - 1}
+                />
+              ))}
             </View>
-          ))}
+          ) : (
+            <Text style={styles.noData}>No growth data available</Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <View
+              style={[styles.sectionDot, { backgroundColor: C.textMuted }]}
+            />
+            <Text style={styles.sectionTitle}>Monthly Breakdown</Text>
+          </View>
+          <View style={styles.breakdownCard}>
+            {provider.monthlyTotals.map((m, i) => {
+              const prevTotal = i > 0 ? provider.monthlyTotals[i - 1].total : m.total;
+              const change =
+                i > 0 && prevTotal > 0
+                  ? ((m.total - prevTotal) / prevTotal) * 100
+                  : 0;
+              const changeColor =
+                change > 200 ? C.danger : change > 0 ? C.success : C.textMuted;
+              return (
+                <View
+                  key={m.month}
+                  style={[
+                    styles.breakdownRow,
+                    i === provider.monthlyTotals.length - 1 && {
+                      borderBottomWidth: 0,
+                    },
+                  ]}
+                >
+                  <Text style={styles.breakdownMonth}>
+                    {formatMonthFull(m.month)}
+                  </Text>
+                  <View style={styles.breakdownRight}>
+                    {i > 0 && (
+                      <Text
+                        style={[styles.breakdownChange, { color: changeColor }]}
+                      >
+                        {change >= 0 ? "+" : ""}
+                        {change.toFixed(0)}%
+                      </Text>
+                    )}
+                    <Text style={styles.breakdownAmount}>
+                      {formatCurrency(m.total)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -360,8 +487,10 @@ const styles = StyleSheet.create({
     borderBottomColor: C.border,
   },
   backButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: C.surface,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -374,19 +503,34 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 16,
   },
-  profileSection: {
+
+  profileCard: {
+    borderRadius: 20,
+    padding: 24,
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: C.borderLight,
+    overflow: "hidden",
   },
-  profileIcon: {
+  flaggedCorner: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: C.dangerBg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileAvatar: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
+    borderRadius: 16,
+    backgroundColor: C.tintBg2,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 14,
@@ -396,81 +540,107 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: C.text,
     textAlign: "center",
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: -0.3,
+  },
+  providerIdRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
   },
   providerId: {
     fontFamily: "DMSans_400Regular",
     fontSize: 13,
     color: C.textMuted,
-    marginBottom: 12,
   },
-  flaggedBanner: {
+  flaggedPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     backgroundColor: C.dangerBg,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    marginBottom: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  flaggedText: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 12,
+  flaggedPillText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 9,
     color: C.danger,
+    letterSpacing: 0.8,
   },
-  infoRow: {
-    gap: 8,
-  },
-  infoItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  infoText: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 13,
-    color: C.textSecondary,
-  },
-  statsRow: {
+  providerInfoChips: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 28,
+  },
+  infoChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: C.tintBg,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  infoChipText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 12,
+    color: C.tint,
+  },
+
+  statsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 24,
   },
   statBox: {
     flex: 1,
+    minWidth: "22%" as unknown as number,
     backgroundColor: C.surface,
     borderRadius: 12,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: C.border,
     alignItems: "center",
   },
   statBoxLabel: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 10,
+    fontSize: 9,
     color: C.textMuted,
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: 5,
   },
   statBoxValue: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 18,
+    fontSize: 16,
     color: C.text,
+    letterSpacing: -0.3,
   },
+
   section: {
-    marginBottom: 28,
+    marginBottom: 24,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   sectionTitle: {
     fontFamily: "DMSans_600SemiBold",
     fontSize: 16,
     color: C.text,
-    marginBottom: 14,
   },
   chartCard: {
     backgroundColor: C.surface,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: C.border,
@@ -482,19 +652,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 20,
   },
+
   fraudAlertCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: C.dangerBg,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.2)",
+    borderColor: C.danger + "20",
   },
-  fraudAlertRow: {
+  fraudAlertLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginBottom: 4,
+    gap: 10,
+  },
+  fraudIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: C.danger + "18",
+    justifyContent: "center",
+    alignItems: "center",
   },
   fraudAlertMonth: {
     fontFamily: "DMSans_600SemiBold",
@@ -503,26 +684,52 @@ const styles = StyleSheet.create({
   },
   fraudAlertGrowth: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 12,
+    fontSize: 11,
     color: C.dangerLight,
-    marginLeft: 22,
+  },
+  fraudAlertAmount: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 15,
+    color: C.danger,
+    letterSpacing: -0.3,
+  },
+
+  breakdownCard: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
   },
   breakdownRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 12,
+    alignItems: "center",
+    paddingVertical: 13,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
   breakdownMonth: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 14,
+    fontSize: 13,
     color: C.textSecondary,
+  },
+  breakdownRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  breakdownChange: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 11,
   },
   breakdownAmount: {
     fontFamily: "DMSans_600SemiBold",
     fontSize: 14,
     color: C.text,
+    minWidth: 60,
+    textAlign: "right",
   },
 });
 
@@ -530,12 +737,25 @@ const chartStyles = StyleSheet.create({
   container: {
     paddingTop: 8,
   },
+  gridLines: {
+    position: "absolute",
+    top: 8,
+    left: 0,
+    right: 0,
+    height: 130,
+    justifyContent: "space-between",
+  },
+  gridLine: {
+    height: 1,
+    backgroundColor: C.border,
+    opacity: 0.5,
+  },
   bars: {
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
-    height: 140,
-    gap: 4,
+    height: 155,
+    gap: 3,
   },
   barCol: {
     flex: 1,
@@ -543,12 +763,18 @@ const chartStyles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   bar: {
-    width: "70%",
+    width: "65%",
     borderRadius: 4,
     minHeight: 3,
   },
-  barLabel: {
+  barAmount: {
     fontFamily: "DMSans_400Regular",
+    fontSize: 7,
+    color: C.textMuted,
+    marginBottom: 3,
+  },
+  barLabel: {
+    fontFamily: "DMSans_500Medium",
     fontSize: 9,
     color: C.textMuted,
     marginTop: 6,
@@ -581,14 +807,19 @@ const timelineStyles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingLeft: 12,
+    paddingLeft: 14,
     paddingBottom: 16,
+  },
+  contentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
   },
   month: {
     fontFamily: "DMSans_500Medium",
     fontSize: 13,
     color: C.text,
-    marginBottom: 4,
   },
   growthWrap: {
     flexDirection: "row",
@@ -600,13 +831,15 @@ const timelineStyles = StyleSheet.create({
     fontSize: 13,
   },
   flagBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    marginLeft: 6,
   },
   flagText: {
-    fontFamily: "DMSans_600SemiBold",
+    fontFamily: "DMSans_700Bold",
     fontSize: 8,
     letterSpacing: 0.5,
   },

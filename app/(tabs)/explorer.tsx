@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,10 +10,12 @@ import {
   FlatList,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import { Ionicons, Feather } from "@expo/vector-icons";
+import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 const C = Colors.light;
 
@@ -38,6 +40,11 @@ interface ProcedureOption {
   desc: string;
 }
 
+interface FraudAlert {
+  provider_id: string;
+  severity: string;
+}
+
 function formatCurrency(n: number): string {
   if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
@@ -56,7 +63,12 @@ function FilterChip({
   return (
     <Pressable
       style={[styles.chip, selected && styles.chipSelected]}
-      onPress={onPress}
+      onPress={() => {
+        if (Platform.OS !== "web") {
+          Haptics.selectionAsync();
+        }
+        onPress();
+      }}
     >
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
         {label}
@@ -65,57 +77,116 @@ function FilterChip({
   );
 }
 
-function ProviderCard({ provider }: { provider: Provider }) {
+function MiniSpendBar({ spend, maxSpend }: { spend: number; maxSpend: number }) {
+  const ratio = maxSpend > 0 ? spend / maxSpend : 0;
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.providerCard,
-        { opacity: pressed ? 0.7 : 1 },
-      ]}
-      onPress={() =>
-        router.push({
-          pathname: "/provider/[id]",
-          params: { id: provider.id },
-        })
-      }
-    >
-      <View style={styles.providerTop}>
-        <View style={styles.providerInfo}>
-          <Text style={styles.providerName} numberOfLines={1}>
-            {provider.name}
-          </Text>
-          <View style={styles.providerMeta}>
-            <View style={styles.metaTag}>
-              <Ionicons name="location-outline" size={11} color={C.textMuted} />
-              <Text style={styles.metaText}>{provider.state_name}</Text>
+    <View style={styles.miniBarTrack}>
+      <View
+        style={[
+          styles.miniBarFill,
+          { width: `${ratio * 100}%` as unknown as number },
+        ]}
+      />
+    </View>
+  );
+}
+
+function ProviderCard({
+  provider,
+  maxSpend,
+  isFlagged,
+  index,
+}: {
+  provider: Provider;
+  maxSpend: number;
+  isFlagged: boolean;
+  index: number;
+}) {
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 60).duration(350).springify()}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.providerCard,
+          isFlagged && styles.providerCardFlagged,
+          pressed && { opacity: 0.7 },
+        ]}
+        onPress={() => {
+          if (Platform.OS !== "web") {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+          router.push({
+            pathname: "/provider/[id]",
+            params: { id: provider.id },
+          });
+        }}
+      >
+        <View style={styles.providerTop}>
+          <View style={styles.providerAvatarWrap}>
+            <View
+              style={[
+                styles.providerAvatar,
+                isFlagged && styles.providerAvatarFlagged,
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="hospital-building"
+                size={18}
+                color={isFlagged ? C.danger : C.tint}
+              />
             </View>
-            <View style={styles.metaTag}>
-              <Ionicons name="medkit-outline" size={11} color={C.textMuted} />
-              <Text style={styles.metaText}>{provider.procedure_code}</Text>
+            {isFlagged && <View style={styles.flagDot} />}
+          </View>
+          <View style={styles.providerInfo}>
+            <Text style={styles.providerName} numberOfLines={1}>
+              {provider.name}
+            </Text>
+            <View style={styles.providerTagRow}>
+              <View style={styles.providerTag}>
+                <Text style={styles.providerTagText}>
+                  {provider.state_code}
+                </Text>
+              </View>
+              <View style={styles.providerTag}>
+                <Text style={styles.providerTagText}>
+                  {provider.procedure_code}
+                </Text>
+              </View>
+              {isFlagged && (
+                <View style={styles.providerFlagTag}>
+                  <Text style={styles.providerFlagTagText}>FLAGGED</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <Feather name="chevron-right" size={16} color={C.textMuted} />
+        </View>
+
+        <View style={styles.providerBottom}>
+          <View style={styles.providerSpendCol}>
+            <Text style={styles.providerSpendLabel}>Total Spend</Text>
+            <Text style={styles.providerSpendValue}>
+              {formatCurrency(provider.totalSpend)}
+            </Text>
+            <MiniSpendBar spend={provider.totalSpend} maxSpend={maxSpend} />
+          </View>
+          <View style={styles.providerDivider} />
+          <View style={styles.providerStatsCol}>
+            <View style={styles.providerStatRow}>
+              <Text style={styles.providerStatLabel}>Claims</Text>
+              <Text style={styles.providerStatValue}>
+                {provider.claimCount}
+              </Text>
+            </View>
+            <View style={styles.providerStatRow}>
+              <Text style={styles.providerStatLabel}>Type</Text>
+              <Text style={styles.providerStatValue} numberOfLines={1}>
+                {provider.procedure_desc.split(" ").slice(0, 2).join(" ")}
+              </Text>
             </View>
           </View>
         </View>
-        <Feather name="chevron-right" size={18} color={C.textMuted} />
-      </View>
-      <View style={styles.providerBottom}>
-        <View>
-          <Text style={styles.providerStatLabel}>Total Spend</Text>
-          <Text style={styles.providerStatValue}>
-            {formatCurrency(provider.totalSpend)}
-          </Text>
-        </View>
-        <View>
-          <Text style={styles.providerStatLabel}>Claims</Text>
-          <Text style={styles.providerStatValue}>{provider.claimCount}</Text>
-        </View>
-        <View>
-          <Text style={styles.providerStatLabel}>Procedure</Text>
-          <Text style={styles.providerStatValue} numberOfLines={1}>
-            {provider.procedure_desc.split(" ")[0]}
-          </Text>
-        </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -125,26 +196,22 @@ export default function ExplorerScreen() {
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
-  const statesQuery = useQuery<StateOption[]>({
-    queryKey: ["/api/states"],
-  });
-
+  const statesQuery = useQuery<StateOption[]>({ queryKey: ["/api/states"] });
   const proceduresQuery = useQuery<ProcedureOption[]>({
     queryKey: ["/api/procedures"],
   });
-
-  const providersQuery = useQuery<Provider[]>({
-    queryKey: ["/api/providers"],
-  });
+  const providersQuery = useQuery<Provider[]>({ queryKey: ["/api/providers"] });
+  const scanQuery = useQuery<FraudAlert[]>({ queryKey: ["/api/scan"] });
 
   const isLoading =
-    statesQuery.isLoading ||
-    proceduresQuery.isLoading ||
-    providersQuery.isLoading;
+    statesQuery.isLoading || proceduresQuery.isLoading || providersQuery.isLoading;
 
   const states = statesQuery.data || [];
   const procedures = proceduresQuery.data || [];
   const allProviders = providersQuery.data || [];
+  const flaggedIds = new Set(
+    (scanQuery.data || []).map((a) => a.provider_id)
+  );
 
   const filteredProviders = allProviders.filter((p) => {
     if (selectedState && p.state_code !== selectedState) return false;
@@ -152,9 +219,18 @@ export default function ExplorerScreen() {
     return true;
   });
 
+  const maxSpend = Math.max(...allProviders.map((p) => p.totalSpend), 1);
+
   const renderProvider = useCallback(
-    ({ item }: { item: Provider }) => <ProviderCard provider={item} />,
-    []
+    ({ item, index }: { item: Provider; index: number }) => (
+      <ProviderCard
+        provider={item}
+        maxSpend={maxSpend}
+        isFlagged={flaggedIds.has(item.id)}
+        index={index}
+      />
+    ),
+    [maxSpend, flaggedIds]
   );
 
   if (isLoading) {
@@ -167,7 +243,7 @@ export default function ExplorerScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerArea, { paddingTop: topInset + 16 }]}>
+      <View style={[styles.headerArea, { paddingTop: topInset + 12 }]}>
         <Text style={styles.headerLabel}>Data Explorer</Text>
         <Text style={styles.headerTitle}>Providers</Text>
 
@@ -221,10 +297,22 @@ export default function ExplorerScreen() {
           </ScrollView>
         </View>
 
-        <Text style={styles.resultCount}>
-          {filteredProviders.length} provider
-          {filteredProviders.length !== 1 ? "s" : ""} found
-        </Text>
+        <View style={styles.resultBar}>
+          <Text style={styles.resultCount}>
+            {filteredProviders.length} provider
+            {filteredProviders.length !== 1 ? "s" : ""}
+          </Text>
+          {(selectedState || selectedCode) && (
+            <Pressable
+              onPress={() => {
+                setSelectedState(null);
+                setSelectedCode(null);
+              }}
+            >
+              <Text style={styles.clearFilters}>Clear filters</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <FlatList
@@ -233,13 +321,17 @@ export default function ExplorerScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
           paddingHorizontal: 20,
+          paddingTop: 4,
           paddingBottom: Platform.OS === "web" ? 84 + 34 : 100,
         }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={40} color={C.textMuted} />
-            <Text style={styles.emptyText}>No providers match filters</Text>
+            <Ionicons name="search-outline" size={44} color={C.textMuted} />
+            <Text style={styles.emptyTitle}>No Matches</Text>
+            <Text style={styles.emptyText}>
+              No providers match the selected filters
+            </Text>
           </View>
         }
       />
@@ -258,42 +350,43 @@ const styles = StyleSheet.create({
   },
   headerArea: {
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
   headerLabel: {
-    fontFamily: "DMSans_500Medium",
+    fontFamily: "DMSans_600SemiBold",
     fontSize: 13,
     color: C.tint,
     textTransform: "uppercase" as const,
-    letterSpacing: 1.2,
-    marginBottom: 4,
+    letterSpacing: 1.5,
+    marginBottom: 2,
   },
   headerTitle: {
     fontFamily: "DMSans_700Bold",
     fontSize: 28,
     color: C.text,
-    marginBottom: 18,
+    letterSpacing: -0.5,
+    marginBottom: 16,
   },
   filterSection: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   filterLabel: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 12,
-    color: C.textSecondary,
-    marginBottom: 8,
+    fontSize: 11,
+    color: C.textMuted,
+    marginBottom: 6,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   chipRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 7,
   },
   chip: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: C.surface,
     borderWidth: 1,
@@ -309,26 +402,67 @@ const styles = StyleSheet.create({
     color: C.textSecondary,
   },
   chipTextSelected: {
-    color: C.background,
+    color: C.textInverse,
+    fontFamily: "DMSans_600SemiBold",
+  },
+  resultBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
   },
   resultCount: {
     fontFamily: "DMSans_400Regular",
     fontSize: 12,
     color: C.textMuted,
-    marginTop: 4,
   },
+  clearFilters: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 12,
+    color: C.tint,
+  },
+
   providerCard: {
     backgroundColor: C.surface,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
-    marginTop: 12,
+    marginTop: 10,
     borderWidth: 1,
     borderColor: C.border,
+  },
+  providerCardFlagged: {
+    borderColor: C.danger + "30",
   },
   providerTop: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 14,
+  },
+  providerAvatarWrap: {
+    position: "relative",
+    marginRight: 12,
+  },
+  providerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: C.tintBg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  providerAvatarFlagged: {
+    backgroundColor: C.dangerBg,
+  },
+  flagDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: C.danger,
+    borderWidth: 2,
+    borderColor: C.surface,
   },
   providerInfo: {
     flex: 1,
@@ -340,48 +474,110 @@ const styles = StyleSheet.create({
     color: C.text,
     marginBottom: 6,
   },
-  providerMeta: {
+  providerTagRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: 5,
   },
-  metaTag: {
+  providerTag: {
+    backgroundColor: C.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  providerTagText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 10,
+    color: C.textSecondary,
+    letterSpacing: 0.3,
+  },
+  providerFlagTag: {
+    backgroundColor: C.dangerBg,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  providerFlagTagText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 9,
+    color: C.danger,
+    letterSpacing: 0.5,
+  },
+  providerBottom: {
     flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 14,
+  },
+  providerSpendCol: {
+    flex: 1.2,
+  },
+  providerSpendLabel: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 10,
+    color: C.textMuted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  providerSpendValue: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 18,
+    color: C.text,
+    letterSpacing: -0.3,
+    marginBottom: 8,
+  },
+  miniBarTrack: {
+    height: 4,
+    backgroundColor: C.border,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  miniBarFill: {
+    height: "100%",
+    backgroundColor: C.tint,
+    borderRadius: 2,
+  },
+  providerDivider: {
+    width: 1,
+    backgroundColor: C.border,
+    marginHorizontal: 16,
+  },
+  providerStatsCol: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 10,
+  },
+  providerStatRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 4,
   },
-  metaText: {
+  providerStatLabel: {
     fontFamily: "DMSans_400Regular",
     fontSize: 11,
     color: C.textMuted,
   },
-  providerBottom: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    paddingTop: 12,
-  },
-  providerStatLabel: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 10,
-    color: C.textMuted,
-    marginBottom: 3,
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
   providerStatValue: {
     fontFamily: "DMSans_600SemiBold",
-    fontSize: 14,
+    fontSize: 12,
     color: C.text,
+    maxWidth: 100,
   },
+
   emptyState: {
     alignItems: "center",
     paddingVertical: 60,
-    gap: 12,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontFamily: "DMSans_600SemiBold",
+    fontSize: 17,
+    color: C.text,
+    marginTop: 4,
   },
   emptyText: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 15,
+    fontFamily: "DMSans_400Regular",
+    fontSize: 14,
     color: C.textSecondary,
   },
 });
