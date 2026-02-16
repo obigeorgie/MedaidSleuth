@@ -246,6 +246,8 @@ export default function ProviderDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/watchlist/check", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
     },
   });
 
@@ -255,6 +257,8 @@ export default function ProviderDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/watchlist/check", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
     },
   });
 
