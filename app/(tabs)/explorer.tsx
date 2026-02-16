@@ -8,14 +8,16 @@ import {
   ActivityIndicator,
   Platform,
   FlatList,
+  Alert,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { apiRequest } from "@/lib/query-client";
 
 const C = Colors.light;
 
@@ -195,6 +197,7 @@ export default function ExplorerScreen() {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const statesQuery = useQuery<StateOption[]>({ queryKey: ["/api/states"] });
   const proceduresQuery = useQuery<ProcedureOption[]>({
@@ -202,6 +205,19 @@ export default function ExplorerScreen() {
   });
   const providersQuery = useQuery<Provider[]>({ queryKey: ["/api/providers"] });
   const scanQuery = useQuery<FraudAlert[]>({ queryKey: ["/api/scan"] });
+
+  const saveSearchMutation = useMutation({
+    mutationFn: async (data: { name: string; stateCode: string | null; procedureCode: string | null }) => {
+      await apiRequest("POST", "/api/saved-searches", {
+        name: data.name,
+        stateCode: data.stateCode,
+        procedureCode: data.procedureCode,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/saved-searches"] });
+    },
+  });
 
   const isLoading =
     statesQuery.isLoading || proceduresQuery.isLoading || providersQuery.isLoading;
@@ -232,6 +248,44 @@ export default function ExplorerScreen() {
     ),
     [maxSpend, flaggedIds]
   );
+
+  const handleSaveSearch = useCallback(() => {
+    const showPrompt = () => {
+      const promptName = Platform.OS === "web" 
+        ? window.prompt("Search name")
+        : null;
+
+      if (Platform.OS === "web" && promptName !== null) {
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        saveSearchMutation.mutate({
+          name: promptName,
+          stateCode: selectedState,
+          procedureCode: selectedCode,
+        });
+      } else if (Platform.OS !== "web") {
+        Alert.prompt(
+          "Save Search",
+          "Enter a name for this search",
+          (text) => {
+            if (text.trim()) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              saveSearchMutation.mutate({
+                name: text.trim(),
+                stateCode: selectedState,
+                procedureCode: selectedCode,
+              });
+            }
+          },
+          "plain-text",
+          "",
+          "default"
+        );
+      }
+    };
+    showPrompt();
+  }, [selectedState, selectedCode, saveSearchMutation]);
 
   if (isLoading) {
     return (
@@ -302,16 +356,26 @@ export default function ExplorerScreen() {
             {filteredProviders.length} provider
             {filteredProviders.length !== 1 ? "s" : ""}
           </Text>
-          {(selectedState || selectedCode) && (
-            <Pressable
-              onPress={() => {
-                setSelectedState(null);
-                setSelectedCode(null);
-              }}
-            >
-              <Text style={styles.clearFilters}>Clear filters</Text>
-            </Pressable>
-          )}
+          <View style={styles.resultBarActions}>
+            {(selectedState || selectedCode) && (
+              <Pressable
+                onPress={handleSaveSearch}
+                disabled={saveSearchMutation.isPending}
+              >
+                <Feather name="bookmark" size={18} color={C.tint} />
+              </Pressable>
+            )}
+            {(selectedState || selectedCode) && (
+              <Pressable
+                onPress={() => {
+                  setSelectedState(null);
+                  setSelectedCode(null);
+                }}
+              >
+                <Text style={styles.clearFilters}>Clear filters</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       </View>
 
@@ -415,6 +479,11 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_400Regular",
     fontSize: 12,
     color: C.textMuted,
+  },
+  resultBarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   clearFilters: {
     fontFamily: "DMSans_500Medium",

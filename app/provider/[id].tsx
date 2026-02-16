@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,14 +7,19 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  Alert,
+  Linking,
+  TextInput,
+  Modal,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { LinearGradient } from "expo-linear-gradient";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -44,6 +49,13 @@ interface FraudAlert {
   growth_percent: number;
   monthly_total: number;
   severity: "critical" | "high" | "medium";
+}
+
+interface CaseNote {
+  id: number;
+  providerId: string;
+  content: string;
+  createdAt: string;
 }
 
 interface ProviderDetail {
@@ -208,6 +220,135 @@ export default function ProviderDetailScreen() {
     queryKey: ["/api/providers", id],
   });
 
+  const queryClient = useQueryClient();
+
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [shareUsername, setShareUsername] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
+  const [noteModalVisible, setNoteModalVisible] = useState(false);
+  const [noteContent, setNoteContent] = useState("");
+
+  const watchlistQuery = useQuery<{ isWatched: boolean }>({
+    queryKey: ["/api/watchlist/check", id],
+    enabled: !!id,
+  });
+
+  const isWatched = watchlistQuery.data?.isWatched ?? false;
+
+  const addWatchlistMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/watchlist", {
+        providerId: providerQuery.data?.id,
+        providerName: providerQuery.data?.name,
+        stateCode: providerQuery.data?.state_code,
+        procedureCode: providerQuery.data?.procedure_code,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist/check", id] });
+    },
+  });
+
+  const removeWatchlistMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/watchlist/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist/check", id] });
+    },
+  });
+
+  const toggleWatchlist = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (isWatched) {
+      removeWatchlistMutation.mutate();
+    } else {
+      addWatchlistMutation.mutate();
+    }
+  };
+
+  const handleShare = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS === "web") {
+      const username = window.prompt("Enter username to share with:");
+      if (!username) return;
+      const msg = window.prompt("Add a message (optional):") || "";
+      apiRequest("POST", "/api/shared-findings", {
+        toUsername: username,
+        providerId: providerQuery.data?.id,
+        providerName: providerQuery.data?.name,
+        message: msg,
+      });
+    } else {
+      setShareUsername("");
+      setShareMessage("");
+      setShareModalVisible(true);
+    }
+  };
+
+  const submitShare = () => {
+    if (!shareUsername.trim()) return;
+    apiRequest("POST", "/api/shared-findings", {
+      toUsername: shareUsername.trim(),
+      providerId: providerQuery.data?.id,
+      providerName: providerQuery.data?.name,
+      message: shareMessage.trim(),
+    });
+    setShareModalVisible(false);
+  };
+
+  const handleExport = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openURL(getApiUrl() + "api/export/csv");
+  };
+
+  const caseNotesQuery = useQuery<CaseNote[]>({
+    queryKey: ["/api/case-notes", id],
+    enabled: !!id,
+  });
+
+  const createNoteMutation = useMutation({
+    mutationFn: async (content: string) => {
+      await apiRequest("POST", "/api/case-notes", { providerId: id, content });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/case-notes", id] });
+    },
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: async (noteId: number) => {
+      await apiRequest("DELETE", `/api/case-notes/${noteId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/case-notes", id] });
+    },
+  });
+
+  const handleAddNote = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS === "web") {
+      const content = window.prompt("Enter case note:");
+      if (content && content.trim()) {
+        createNoteMutation.mutate(content.trim());
+      }
+    } else {
+      setNoteContent("");
+      setNoteModalVisible(true);
+    }
+  };
+
+  const submitNote = () => {
+    if (!noteContent.trim()) return;
+    createNoteMutation.mutate(noteContent.trim());
+    setNoteModalVisible(false);
+  };
+
+  const handleDeleteNote = (noteId: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    deleteNoteMutation.mutate(noteId);
+  };
+
   const provider = providerQuery.data;
   const isLoading = providerQuery.isLoading;
 
@@ -306,6 +447,22 @@ export default function ProviderDetailScreen() {
             </View>
           </LinearGradient>
         </Animated.View>
+
+        <View style={actionStyles.row}>
+          <Pressable onPress={toggleWatchlist} style={actionStyles.btn}>
+            <Ionicons
+              name={isWatched ? "eye" : "eye-off-outline"}
+              size={22}
+              color={isWatched ? C.tint : C.textMuted}
+            />
+          </Pressable>
+          <Pressable onPress={handleShare} style={actionStyles.btn}>
+            <Ionicons name="share-outline" size={22} color={C.textMuted} />
+          </Pressable>
+          <Pressable onPress={handleExport} style={actionStyles.btn}>
+            <Ionicons name="download-outline" size={22} color={C.textMuted} />
+          </Pressable>
+        </View>
 
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
@@ -408,6 +565,43 @@ export default function ProviderDetailScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionDot, { backgroundColor: C.accent }]} />
+            <Text style={styles.sectionTitle}>Case Notes</Text>
+          </View>
+          <Pressable onPress={handleAddNote} style={caseNoteStyles.addBtn}>
+            <Ionicons name="add-circle-outline" size={18} color={C.tint} />
+            <Text style={caseNoteStyles.addBtnText}>Add Note</Text>
+          </Pressable>
+          {(caseNotesQuery.data ?? []).length > 0 ? (
+            <View style={caseNoteStyles.list}>
+              {(caseNotesQuery.data ?? []).map((note) => (
+                <View key={note.id} style={caseNoteStyles.noteCard}>
+                  <View style={caseNoteStyles.noteHeader}>
+                    <Text style={caseNoteStyles.noteDate}>
+                      {new Date(note.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </Text>
+                    <Pressable
+                      onPress={() => handleDeleteNote(note.id)}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={C.danger} />
+                    </Pressable>
+                  </View>
+                  <Text style={caseNoteStyles.noteContent}>{note.content}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.noData}>No case notes yet</Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
             <View
               style={[styles.sectionDot, { backgroundColor: C.textMuted }]}
             />
@@ -454,6 +648,84 @@ export default function ProviderDetailScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={shareModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <Pressable
+          style={modalStyles.overlay}
+          onPress={() => setShareModalVisible(false)}
+        >
+          <Pressable style={modalStyles.content} onPress={() => {}}>
+            <Text style={modalStyles.title}>Share Finding</Text>
+            <TextInput
+              style={modalStyles.input}
+              placeholder="Username"
+              placeholderTextColor={C.textMuted}
+              value={shareUsername}
+              onChangeText={setShareUsername}
+              autoFocus
+            />
+            <TextInput
+              style={modalStyles.input}
+              placeholder="Message (optional)"
+              placeholderTextColor={C.textMuted}
+              value={shareMessage}
+              onChangeText={setShareMessage}
+            />
+            <View style={modalStyles.actions}>
+              <Pressable
+                onPress={() => setShareModalVisible(false)}
+                style={modalStyles.cancelBtn}
+              >
+                <Text style={modalStyles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={submitShare} style={modalStyles.submitBtn}>
+                <Text style={modalStyles.submitText}>Share</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={noteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNoteModalVisible(false)}
+      >
+        <Pressable
+          style={modalStyles.overlay}
+          onPress={() => setNoteModalVisible(false)}
+        >
+          <Pressable style={modalStyles.content} onPress={() => {}}>
+            <Text style={modalStyles.title}>Add Case Note</Text>
+            <TextInput
+              style={[modalStyles.input, { height: 80, textAlignVertical: "top" }]}
+              placeholder="Enter note..."
+              placeholderTextColor={C.textMuted}
+              value={noteContent}
+              onChangeText={setNoteContent}
+              multiline
+              autoFocus
+            />
+            <View style={modalStyles.actions}>
+              <Pressable
+                onPress={() => setNoteModalVisible(false)}
+                style={modalStyles.cancelBtn}
+              >
+                <Text style={modalStyles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={submitNote} style={modalStyles.submitBtn}>
+                <Text style={modalStyles.submitText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -842,5 +1114,136 @@ const timelineStyles = StyleSheet.create({
     fontFamily: "DMSans_700Bold",
     fontSize: 8,
     letterSpacing: 0.5,
+  },
+});
+
+const actionStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 16,
+    marginBottom: 16,
+  },
+  btn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+});
+
+const caseNoteStyles = StyleSheet.create({
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: C.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 10,
+    alignSelf: "flex-start",
+  },
+  addBtnText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 13,
+    color: C.tint,
+  },
+  list: {
+    gap: 8,
+  },
+  noteCard: {
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+  },
+  noteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  noteDate: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+  },
+  noteContent: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 13,
+    color: C.textSecondary,
+    lineHeight: 19,
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  content: {
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 20,
+    width: "100%",
+    maxWidth: 360,
+  },
+  title: {
+    fontFamily: "DMSans_600SemiBold",
+    fontSize: 16,
+    color: C.text,
+    marginBottom: 16,
+  },
+  input: {
+    backgroundColor: C.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontFamily: "DMSans_400Regular",
+    fontSize: 14,
+    color: C.text,
+    marginBottom: 12,
+  },
+  actions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  cancelText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 14,
+    color: C.textMuted,
+  },
+  submitBtn: {
+    backgroundColor: C.tint,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  submitText: {
+    fontFamily: "DMSans_600SemiBold",
+    fontSize: 14,
+    color: C.textInverse,
   },
 });
