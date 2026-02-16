@@ -4,13 +4,23 @@
 
 MedicaidSleuth is a Medicaid provider spending analysis and fraud detection application. It serves as a "bounty hunter" dashboard that allows users to query Medicaid spending data, visualize billing trends, and automatically scan for fraud spikes (anomalous billing growth patterns). The app is inspired by real-world cases like the Minnesota autism billing scandal.
 
-The application has six main features:
+The application has sixteen main features:
 - **Authentication** — User registration and login with secure password hashing (bcrypt) and session-based auth (express-session with PostgreSQL-backed sessions)
 - **Dashboard** — Overview of total claims, providers, states, spending, and flagged alerts (with logout button in header)
-- **Explorer** — Browse and filter providers by state and procedure code, with drill-down to individual provider detail pages
-- **Scanner** — Automated fraud detection that identifies providers with anomalous billing growth, categorized by severity (critical, high, medium)
+- **Explorer** — Browse and filter providers by state and procedure code, with drill-down to individual provider detail pages. Includes Save Search button when filters are active.
+- **Scanner** — Automated fraud detection that identifies providers with anomalous billing growth, categorized by severity (critical, high, medium). Threshold is user-configurable.
 - **Assistant** — AI-powered fraud analysis assistant (Sleuth AI) using OpenRouter via Replit AI Integrations. Supports streaming chat, conversation history, and Medicaid-specific system prompt
 - **Plans** — Subscription pricing page with Stripe-powered checkout for Analyst ($29/mo) and Investigator ($79/mo) tiers
+- **Watchlist** — Bookmark providers for tracking. Toggle from provider detail page or manage from dedicated Watchlist screen. Shows flagged status and alerts.
+- **Saved Searches** — Save filter combinations (state + procedure code) from the Explorer. Manage saved searches from dedicated screen via More tab.
+- **Alert Thresholds** — Customizable fraud detection sensitivity (50-1000% growth threshold) via Settings screen. Affects Scanner results.
+- **Comparative Analysis** — Select 2-4 providers for side-by-side comparison of spending, claims, alerts, and monthly trends.
+- **Geographic Heatmap** — Card-based visualization of fraud hotspots by state, sorted by alert density with severity breakdown.
+- **Export Reports** — CSV export of fraud scan results accessible from provider detail page download button.
+- **Case Notes** — Add and manage investigation notes on individual provider detail pages. Notes are user-specific.
+- **Team Sharing** — Share provider findings with other users by username. View received/sent findings in Shared Findings screen.
+- **Activity Feed** — Timeline of user actions (watchlist adds, saved searches, case notes, settings changes, shared findings).
+- **Dark/Light Mode Toggle** — Theme preference toggle in Settings (preference saved to backend).
 
 ## User Preferences
 
@@ -34,7 +44,15 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 | `app/(tabs)/explorer.tsx` | Explorer tab — provider listing with state/procedure filters |
 | `app/(tabs)/scanner.tsx` | Scanner tab — fraud detection results with severity levels |
 | `app/(tabs)/assistant.tsx` | Assistant tab — AI chat interface for fraud analysis |
-| `app/provider/[id].tsx` | Provider detail screen — monthly billing trends and alerts |
+| `app/(tabs)/more.tsx` | More tab — hub linking to Watchlist, Activity, Saved Searches, Compare, Heatmap, Shared, Settings |
+| `app/provider/[id].tsx` | Provider detail screen — monthly billing trends, alerts, watchlist toggle, case notes, share, export |
+| `app/watchlist.tsx` | Watchlist screen — manage bookmarked providers with flagged status |
+| `app/settings.tsx` | Settings screen — alert threshold (50-1000%), theme toggle, account info |
+| `app/activity.tsx` | Activity Feed — timeline of user actions with color-coded icons |
+| `app/saved-searches.tsx` | Saved Searches — manage saved filter combinations |
+| `app/compare.tsx` | Compare Providers — select 2-4 providers for side-by-side analysis |
+| `app/heatmap.tsx` | Geographic Heatmap — card-based fraud hotspot visualization by state |
+| `app/shared.tsx` | Shared Findings — received/sent tab view of team-shared provider findings |
 | `app/_layout.tsx` | Root layout with font loading, query client, gesture handler |
 | `components/` | Reusable components (ErrorBoundary, ErrorFallback, AuthScreen, KeyboardAwareScrollView) |
 | `lib/auth.tsx` | AuthProvider context and useAuth hook for user authentication state |
@@ -59,13 +77,13 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 ### Data Layer
 
 - **Claims data**: The backend uses in-memory mock data generated in `server/routes.ts` to simulate T-MSIS (Transformed Medicaid Statistical Information System) claims data. The mock data includes providers, procedure codes, states, and monthly billing totals.
-- **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) with `users`, `conversations`, and `messages` tables. Sessions are stored in a `session` table (created automatically by connect-pg-simple).
+- **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) with `users`, `conversations`, `messages`, `watchlist`, `saved_searches`, `case_notes`, `user_settings`, `shared_findings`, and `activity_logs` tables. Sessions are stored in a `session` table (created automatically by connect-pg-simple).
 - **Storage interface**: `IStorage` interface with `DatabaseStorage` implementation using Drizzle ORM for user CRUD operations.
 
 ### Key Design Patterns
 
 - **File-based routing**: expo-router maps the `app/` directory to navigation routes
-- **Tab navigation**: Five main tabs (Dashboard, Explorer, Scanner, Assistant, Plans) with a detail screen for providers
+- **Tab navigation**: Six main tabs (Dashboard, Explorer, Scanner, Assistant, Plans, More) with a detail screen for providers and 7 sub-screens accessible from the More tab
 - **API pattern**: Frontend uses TanStack React Query to fetch from the Express backend. API base URL is derived from `EXPO_PUBLIC_DOMAIN` environment variable.
 - **Color system**: Single dark color theme defined in `constants/colors.ts` — deep space navy (#060D1B) background, vivid cyan (#00E5CC) accent, coral danger (#FF4D6A), amber warning (#FFB020), electric blue (#4C7CFF) secondary accent. The app does NOT use light/dark mode switching, it's always dark themed
 - **Animations**: Uses react-native-reanimated for entry animations (FadeIn, FadeInDown, spring animations), animated progress bars, pulsing scan rings, and animated bar charts
