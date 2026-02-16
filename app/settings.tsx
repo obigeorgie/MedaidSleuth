@@ -15,7 +15,7 @@ import { router } from "expo-router";
 import Colors from "@/constants/colors";
 import { apiRequest, queryClient } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth";
-import Slider from "@react-native-community/slider";
+import * as Haptics from "expo-haptics";
 
 const C = Colors.light;
 
@@ -119,33 +119,18 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
-          <View style={styles.sliderContainer}>
-            <Slider
-              style={styles.slider}
-              minimumValue={50}
-              maximumValue={1000}
-              step={10}
-              value={currentThreshold}
-              onValueChange={handleThresholdChange}
-              minimumTrackTintColor={C.tint}
-              maximumTrackTintColor={C.border}
-              testID="threshold-slider"
-            />
-            <View style={styles.sliderLabels}>
-              <Text style={styles.sliderLabel}>50%</Text>
-              <Text style={styles.sliderLabel}>1000%</Text>
-            </View>
-          </View>
-
           <View style={styles.presetsContainer}>
-            {[100, 200, 500, 1000].map((value) => (
+            {[50, 100, 200, 300, 500, 750, 1000].map((value) => (
               <Pressable
                 key={value}
                 style={[
                   styles.presetButton,
                   Math.round(currentThreshold) === value && styles.presetButtonActive,
                 ]}
-                onPress={() => handlePresetThreshold(value)}
+                onPress={() => {
+                  if (Platform.OS !== "web") Haptics.selectionAsync();
+                  handlePresetThreshold(value);
+                }}
                 testID={`preset-${value}`}
               >
                 <Text
@@ -318,24 +303,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.textSecondary,
     lineHeight: 18,
-  },
-
-  sliderContainer: {
-    marginBottom: 16,
-  },
-  slider: {
-    height: 40,
-    marginHorizontal: -8,
-  },
-  sliderLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 0,
-  },
-  sliderLabel: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 11,
-    color: C.textMuted,
   },
 
   presetsContainer: {
