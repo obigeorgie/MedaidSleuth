@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { sql } from "drizzle-orm";
+import { requireAuth } from "./auth";
 
 interface Claim {
   provider_id: string;
@@ -290,7 +291,7 @@ function scanForFraud(): FraudResult[] {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.get("/api/stats", (_req: Request, res: Response) => {
+  app.get("/api/stats", requireAuth, (_req: Request, res: Response) => {
     const uniqueProviders = new Set(claims.map((c) => c.provider_id));
     const uniqueStates = new Set(claims.map((c) => c.state_code));
     const totalSpend = claims.reduce((sum, c) => sum + c.total_paid, 0);
@@ -306,7 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.get("/api/claims", (req: Request, res: Response) => {
+  app.get("/api/claims", requireAuth, (req: Request, res: Response) => {
     let filtered = [...claims];
 
     const state = req.query.state as string | undefined;
@@ -321,11 +322,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(filtered);
   });
 
-  app.get("/api/scan", (_req: Request, res: Response) => {
+  app.get("/api/scan", requireAuth, (_req: Request, res: Response) => {
     res.json(scanForFraud());
   });
 
-  app.get("/api/providers", (_req: Request, res: Response) => {
+  app.get("/api/providers", requireAuth, (_req: Request, res: Response) => {
     const providerMap: Record<
       string,
       {
@@ -360,7 +361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(Object.values(providerMap));
   });
 
-  app.get("/api/providers/:id", (req: Request, res: Response) => {
+  app.get("/api/providers/:id", requireAuth, (req: Request, res: Response) => {
     const providerId = req.params.id;
     const providerClaims = claims.filter((c) => c.provider_id === providerId);
 
@@ -404,7 +405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.get("/api/states", (_req: Request, res: Response) => {
+  app.get("/api/states", requireAuth, (_req: Request, res: Response) => {
     const states = [...new Set(claims.map((c) => c.state_code))].map((code) => ({
       code,
       name: STATE_MAP[code] || code,
@@ -412,7 +413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(states);
   });
 
-  app.get("/api/procedures", (_req: Request, res: Response) => {
+  app.get("/api/procedures", requireAuth, (_req: Request, res: Response) => {
     const codes = [...new Set(claims.map((c) => c.procedure_code))].map(
       (code) => ({
         code,
