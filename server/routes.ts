@@ -1,8 +1,18 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
-import { sql } from "drizzle-orm";
+import { sql, eq, and, desc, or } from "drizzle-orm";
 import { requireAuth } from "./auth";
+import { db } from "./db";
+import {
+  watchlist,
+  savedSearches,
+  caseNotes,
+  userSettings,
+  sharedFindings,
+  activityLogs,
+  users,
+} from "@shared/schema";
 
 interface Claim {
   provider_id: string;
@@ -235,7 +245,7 @@ function getMonthlyTotals(providerId: string) {
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
-function scanForFraud(): FraudResult[] {
+function scanForFraud(threshold: number = 200): FraudResult[] {
   const grouped: Record<string, { month: string; total: number }[]> = {};
 
   for (const c of claims) {
@@ -264,7 +274,7 @@ function scanForFraud(): FraudResult[] {
       const curr = months[i].total;
       if (prev > 0) {
         const growth = ((curr - prev) / prev) * 100;
-        if (growth > 200) {
+        if (growth > threshold) {
           let severity: "critical" | "high" | "medium" = "medium";
           if (growth > 1000) severity = "critical";
           else if (growth > 500) severity = "high";
@@ -322,8 +332,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(filtered);
   });
 
-  app.get("/api/scan", requireAuth, (_req: Request, res: Response) => {
-    res.json(scanForFraud());
+  app.get("/api/scan", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    let threshold = 200;
+    try {
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      if (settings?.alertThreshold) threshold = settings.alertThreshold;
+    } catch (e) {}
+    const thresholdParam = req.query.threshold as string | undefined;
+    if (thresholdParam) threshold = parseInt(thresholdParam, 10);
+    res.json(scanForFraud(threshold));
   });
 
   app.get("/api/providers", requireAuth, (_req: Request, res: Response) => {
@@ -421,6 +439,315 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
     );
     res.json(codes);
+  });
+
+  // --- Watchlist routes ---
+
+  app.get("/api/watchlist", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const items = await db.select().from(watchlist).where(eq(watchlist.userId, userId)).orderBy(desc(watchlist.addedAt));
+      const fraudAlerts = scanForFraud();
+      const flaggedIds = new Set(fraudAlerts.map((f) => f.provider_id));
+      const enriched = items.map((item) => ({
+        ...item,
+        isFlagged: flaggedIds.has(item.providerId),
+        alerts: fraudAlerts.filter((f) => f.provider_id === item.providerId),
+      }));
+      res.json(enriched);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch watchlist" });
+    }
+  });
+
+  app.post("/api/watchlist", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { providerId, providerName, stateCode, procedureCode } = req.body;
+      if (!providerId) return res.status(400).json({ message: "providerId required" });
+      const existing = await db.select().from(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.providerId, providerId)));
+      if (existing.length > 0) return res.status(409).json({ message: "Already in watchlist" });
+      const [item] = await db.insert(watchlist).values({ userId, providerId, providerName: providerName || providerId, stateCode: stateCode || "", procedureCode: procedureCode || "" }).returning();
+      await db.insert(activityLogs).values({ userId, action: "added_to_watchlist", entityType: "provider", entityId: providerId, metadata: { providerName } });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to add to watchlist" });
+    }
+  });
+
+  app.delete("/api/watchlist/:providerId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const providerId = req.params.providerId;
+      await db.delete(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.providerId, providerId)));
+      await db.insert(activityLogs).values({ userId, action: "removed_from_watchlist", entityType: "provider", entityId: providerId });
+      res.json({ message: "Removed from watchlist" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to remove from watchlist" });
+    }
+  });
+
+  app.get("/api/watchlist/check/:providerId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const providerId = req.params.providerId;
+      const existing = await db.select().from(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.providerId, providerId)));
+      res.json({ isWatched: existing.length > 0 });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to check watchlist" });
+    }
+  });
+
+  // --- Saved Searches routes ---
+
+  app.get("/api/saved-searches", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const searches = await db.select().from(savedSearches).where(eq(savedSearches.userId, userId)).orderBy(desc(savedSearches.createdAt));
+      res.json(searches);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch saved searches" });
+    }
+  });
+
+  app.post("/api/saved-searches", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { name, stateCode, procedureCode } = req.body;
+      if (!name) return res.status(400).json({ message: "name required" });
+      const [search] = await db.insert(savedSearches).values({ userId, name, stateCode: stateCode || null, procedureCode: procedureCode || null }).returning();
+      await db.insert(activityLogs).values({ userId, action: "saved_search", entityType: "search", entityId: search.id.toString(), metadata: { name, stateCode, procedureCode } });
+      res.status(201).json(search);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to save search" });
+    }
+  });
+
+  app.delete("/api/saved-searches/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id, 10);
+      await db.delete(savedSearches).where(and(eq(savedSearches.id, id), eq(savedSearches.userId, userId)));
+      res.json({ message: "Deleted" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to delete search" });
+    }
+  });
+
+  // --- User Settings routes (alert threshold) ---
+
+  app.get("/api/settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      let [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      if (!settings) {
+        [settings] = await db.insert(userSettings).values({ userId }).returning();
+      }
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      res.json({ ...settings, themePreference: user?.themePreference || "dark" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+
+  app.put("/api/settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { alertThreshold, themePreference } = req.body;
+      let [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+      if (!settings) {
+        [settings] = await db.insert(userSettings).values({ userId, alertThreshold: alertThreshold || 200 }).returning();
+      } else {
+        if (alertThreshold !== undefined) {
+          [settings] = await db.update(userSettings).set({ alertThreshold, updatedAt: new Date() }).where(eq(userSettings.userId, userId)).returning();
+        }
+      }
+      if (themePreference !== undefined) {
+        await db.update(users).set({ themePreference }).where(eq(users.id, userId));
+      }
+      await db.insert(activityLogs).values({ userId, action: "updated_settings", entityType: "settings", metadata: { alertThreshold, themePreference } });
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // --- Case Notes routes ---
+
+  app.get("/api/case-notes/:providerId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const providerId = req.params.providerId;
+      const notes = await db.select().from(caseNotes).where(and(eq(caseNotes.userId, userId), eq(caseNotes.providerId, providerId))).orderBy(desc(caseNotes.createdAt));
+      res.json(notes);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch case notes" });
+    }
+  });
+
+  app.post("/api/case-notes", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { providerId, content, tags } = req.body;
+      if (!providerId || !content) return res.status(400).json({ message: "providerId and content required" });
+      const [note] = await db.insert(caseNotes).values({ userId, providerId, content, tags: tags || [] }).returning();
+      await db.insert(activityLogs).values({ userId, action: "added_case_note", entityType: "case_note", entityId: providerId, metadata: { noteId: note.id } });
+      res.status(201).json(note);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to create case note" });
+    }
+  });
+
+  app.delete("/api/case-notes/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id, 10);
+      await db.delete(caseNotes).where(and(eq(caseNotes.id, id), eq(caseNotes.userId, userId)));
+      res.json({ message: "Deleted" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to delete case note" });
+    }
+  });
+
+  // --- Shared Findings routes ---
+
+  app.get("/api/shared-findings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const received = await db.select().from(sharedFindings).where(eq(sharedFindings.toUserId, userId)).orderBy(desc(sharedFindings.createdAt));
+      const sent = await db.select().from(sharedFindings).where(eq(sharedFindings.fromUserId, userId)).orderBy(desc(sharedFindings.createdAt));
+      const allUsers = await db.select({ id: users.id, username: users.username }).from(users);
+      const userMap: Record<string, string> = {};
+      allUsers.forEach((u) => { userMap[u.id] = u.username; });
+      const enrichReceived = received.map((f) => ({ ...f, fromUsername: userMap[f.fromUserId] || "Unknown" }));
+      const enrichSent = sent.map((f) => ({ ...f, toUsername: userMap[f.toUserId] || "Unknown" }));
+      res.json({ received: enrichReceived, sent: enrichSent });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch shared findings" });
+    }
+  });
+
+  app.post("/api/shared-findings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { toUsername, providerId, providerName, message } = req.body;
+      if (!toUsername || !providerId) return res.status(400).json({ message: "toUsername and providerId required" });
+      const [targetUser] = await db.select().from(users).where(eq(users.username, toUsername));
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+      if (targetUser.id === userId) return res.status(400).json({ message: "Cannot share with yourself" });
+      const [finding] = await db.insert(sharedFindings).values({ fromUserId: userId, toUserId: targetUser.id, providerId, providerName: providerName || providerId, message: message || null }).returning();
+      await db.insert(activityLogs).values({ userId, action: "shared_finding", entityType: "provider", entityId: providerId, metadata: { toUsername, providerName } });
+      res.status(201).json(finding);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to share finding" });
+    }
+  });
+
+  app.put("/api/shared-findings/:id/read", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id, 10);
+      await db.update(sharedFindings).set({ isRead: true }).where(and(eq(sharedFindings.id, id), eq(sharedFindings.toUserId, userId)));
+      res.json({ message: "Marked as read" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.get("/api/users/search", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const q = (req.query.q as string || "").toLowerCase();
+      const userId = req.session.userId!;
+      const allUsers = await db.select({ id: users.id, username: users.username }).from(users);
+      const filtered = allUsers.filter((u) => u.id !== userId && u.username.toLowerCase().includes(q));
+      res.json(filtered.slice(0, 10));
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to search users" });
+    }
+  });
+
+  // --- Activity Feed routes ---
+
+  app.get("/api/activity", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const logs = await db.select().from(activityLogs).where(eq(activityLogs.userId, userId)).orderBy(desc(activityLogs.createdAt)).limit(50);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch activity" });
+    }
+  });
+
+  // --- Comparative Analysis route ---
+
+  app.get("/api/compare", requireAuth, (req: Request, res: Response) => {
+    const ids = ((req.query.ids as string) || "").split(",").filter(Boolean);
+    if (ids.length < 2) return res.status(400).json({ message: "At least 2 provider IDs required" });
+    const results = ids.map((id) => {
+      const providerClaims = claims.filter((c) => c.provider_id === id);
+      if (providerClaims.length === 0) return null;
+      const sample = providerClaims[0];
+      const monthlyTotals = getMonthlyTotals(id);
+      const totalSpend = providerClaims.reduce((s, c) => s + c.total_paid, 0);
+      const fraudAlerts = scanForFraud().filter((f) => f.provider_id === id);
+      return {
+        id: sample.provider_id,
+        name: sample.provider_name,
+        state_code: sample.state_code,
+        state_name: sample.state_name,
+        procedure_code: sample.procedure_code,
+        procedure_desc: sample.procedure_desc,
+        totalSpend,
+        claimCount: providerClaims.length,
+        monthlyTotals,
+        fraudAlerts,
+        isFlagged: fraudAlerts.length > 0,
+      };
+    }).filter(Boolean);
+    res.json(results);
+  });
+
+  // --- Geographic Heatmap route ---
+
+  app.get("/api/heatmap", requireAuth, (_req: Request, res: Response) => {
+    const fraudAlerts = scanForFraud();
+    const stateData: Record<string, { code: string; name: string; totalSpend: number; alertCount: number; providerCount: number; criticalCount: number; highCount: number; mediumCount: number }> = {};
+    for (const c of claims) {
+      if (!stateData[c.state_code]) {
+        stateData[c.state_code] = { code: c.state_code, name: c.state_name, totalSpend: 0, alertCount: 0, providerCount: 0, criticalCount: 0, highCount: 0, mediumCount: 0 };
+      }
+      stateData[c.state_code].totalSpend += c.total_paid;
+    }
+    const providersByState: Record<string, Set<string>> = {};
+    for (const c of claims) {
+      if (!providersByState[c.state_code]) providersByState[c.state_code] = new Set();
+      providersByState[c.state_code].add(c.provider_id);
+    }
+    for (const [code, providers] of Object.entries(providersByState)) {
+      if (stateData[code]) stateData[code].providerCount = providers.size;
+    }
+    for (const alert of fraudAlerts) {
+      if (stateData[alert.state_code]) {
+        stateData[alert.state_code].alertCount++;
+        if (alert.severity === "critical") stateData[alert.state_code].criticalCount++;
+        else if (alert.severity === "high") stateData[alert.state_code].highCount++;
+        else stateData[alert.state_code].mediumCount++;
+      }
+    }
+    res.json(Object.values(stateData));
+  });
+
+  // --- Export route ---
+
+  app.get("/api/export/csv", requireAuth, (_req: Request, res: Response) => {
+    const fraudAlerts = scanForFraud();
+    const header = "Provider ID,Provider Name,State,Procedure Code,Procedure Description,Month,Billed Amount,Previous Month,Growth %,Severity\n";
+    const rows = fraudAlerts.map((a) =>
+      `"${a.provider_id}","${a.provider_name}","${a.state_name}","${a.procedure_code}","${a.procedure_desc}","${a.month}",${a.monthly_total},${a.prev_month_total},${a.growth_percent},"${a.severity}"`
+    ).join("\n");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=fraud-report.csv");
+    res.send(header + rows);
   });
 
   // --- Stripe payment routes ---
