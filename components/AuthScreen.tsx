@@ -20,9 +20,14 @@ import Colors from "@/constants/colors";
 
 const C = Colors.light;
 
-export default function AuthScreen() {
+interface AuthScreenProps {
+  initialMode?: "login" | "register";
+  onBack?: () => void;
+}
+
+export default function AuthScreen({ initialMode = "login", onBack }: AuthScreenProps) {
   const insets = useSafeAreaInsets();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -96,6 +101,15 @@ export default function AuthScreen() {
           ]}
           keyboardShouldPersistTaps="handled"
         >
+          {onBack ? (
+            <Animated.View entering={FadeIn.duration(300)} style={styles.backRow}>
+              <TouchableOpacity onPress={onBack} style={styles.backButton} activeOpacity={0.7} testID="auth-back-button">
+                <Ionicons name="arrow-back" size={20} color={C.text} />
+                <Text style={styles.backText}>Back</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : null}
+
           <Animated.View entering={FadeIn.duration(600)} style={styles.logoSection}>
             <Image
               source={require("@/assets/images/logo-dark.png")}
@@ -365,5 +379,21 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_600SemiBold",
     fontSize: 13,
     color: C.tint,
+  },
+  backRow: {
+    alignSelf: "flex-start",
+    marginBottom: 16,
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingRight: 12,
+  },
+  backText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 15,
+    color: C.text,
   },
 });

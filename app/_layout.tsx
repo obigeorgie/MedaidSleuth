@@ -18,11 +18,15 @@ import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator } from "react-native";
 import Colors from "@/constants/colors";
 import AuthScreen from "@/components/AuthScreen";
+import WelcomeScreen from "@/components/WelcomeScreen";
 
 SplashScreen.preventAutoHideAsync();
 
+type UnauthView = "welcome" | "login" | "register";
+
 function AppContent() {
   const { user, isLoading } = useAuth();
+  const [unauthView, setUnauthView] = React.useState<UnauthView>("welcome");
 
   if (isLoading) {
     return (
@@ -33,7 +37,20 @@ function AppContent() {
   }
 
   if (!user) {
-    return <AuthScreen />;
+    if (unauthView === "welcome") {
+      return (
+        <WelcomeScreen
+          onSignIn={() => setUnauthView("login")}
+          onCreateAccount={() => setUnauthView("register")}
+        />
+      );
+    }
+    return (
+      <AuthScreen
+        initialMode={unauthView === "register" ? "register" : "login"}
+        onBack={() => setUnauthView("welcome")}
+      />
+    );
   }
 
   return (
