@@ -73,6 +73,7 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 | `server/seed-products.ts` | Script to seed subscription products in Stripe |
 | `server/replit_integrations/chat/` | AI chat routes and storage (OpenRouter via Replit AI Integrations) |
 | `server/templates/landing-page.html` | Landing page for non-web-app visitors |
+| `server/templates/webapp.html` | Full web dashboard SPA (React via CDN) — accessible at `/webapp` |
 
 ### Data Layer
 
