@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
-  Linking,
   TextInput,
   Modal,
 } from "react-native";
@@ -19,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { LinearGradient } from "expo-linear-gradient";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -263,7 +262,7 @@ export default function ProviderDetailScreen() {
   });
 
   const toggleWatchlist = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isWatched) {
       removeWatchlistMutation.mutate();
     } else {
@@ -271,18 +270,41 @@ export default function ProviderDetailScreen() {
     }
   };
 
+  const shareMutation = useMutation({
+    mutationFn: async ({ toUsername, message }: { toUsername: string; message: string }) => {
+      await apiRequest("POST", "/api/shared-findings", {
+        toUsername,
+        providerId: providerQuery.data?.id,
+        providerName: providerQuery.data?.name,
+        message,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shared-findings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
+      if (Platform.OS === "web") {
+        alert("Finding shared successfully!");
+      } else {
+        Alert.alert("Success", "Finding shared successfully!");
+      }
+    },
+    onError: (error: Error) => {
+      const msg = error.message || "Failed to share finding";
+      if (Platform.OS === "web") {
+        alert(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
+    },
+  });
+
   const handleShare = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (Platform.OS === "web") {
       const username = window.prompt("Enter username to share with:");
       if (!username) return;
       const msg = window.prompt("Add a message (optional):") || "";
-      apiRequest("POST", "/api/shared-findings", {
-        toUsername: username,
-        providerId: providerQuery.data?.id,
-        providerName: providerQuery.data?.name,
-        message: msg,
-      });
+      shareMutation.mutate({ toUsername: username, message: msg });
     } else {
       setShareUsername("");
       setShareMessage("");
@@ -292,18 +314,36 @@ export default function ProviderDetailScreen() {
 
   const submitShare = () => {
     if (!shareUsername.trim()) return;
-    apiRequest("POST", "/api/shared-findings", {
-      toUsername: shareUsername.trim(),
-      providerId: providerQuery.data?.id,
-      providerName: providerQuery.data?.name,
-      message: shareMessage.trim(),
-    });
+    shareMutation.mutate({ toUsername: shareUsername.trim(), message: shareMessage.trim() });
     setShareModalVisible(false);
   };
 
-  const handleExport = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Linking.openURL(getApiUrl() + "api/export/csv");
+  const handleExport = async () => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const res = await apiRequest("GET", "/api/export/csv");
+      const csvText = await res.text();
+      if (Platform.OS === "web") {
+        const blob = new Blob([csvText], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "fraud-report.csv";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        Alert.alert("Export", "CSV export is available on the web version of this app.");
+      }
+    } catch (error: any) {
+      const msg = error.message || "Failed to export CSV";
+      if (Platform.OS === "web") {
+        alert(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
+    }
   };
 
   const caseNotesQuery = useQuery<CaseNote[]>({
@@ -330,7 +370,7 @@ export default function ProviderDetailScreen() {
   });
 
   const handleAddNote = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (Platform.OS === "web") {
       const content = window.prompt("Enter case note:");
       if (content && content.trim()) {
@@ -349,7 +389,7 @@ export default function ProviderDetailScreen() {
   };
 
   const handleDeleteNote = (noteId: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     deleteNoteMutation.mutate(noteId);
   };
 
