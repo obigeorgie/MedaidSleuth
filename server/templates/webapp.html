@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MedicaidSleuth</title>
+  <link rel="icon" type="image/png" href="/assets/images/favicon.png">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; width: 100%; }
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #060D1B;
+      color: #F0F4FA;
+      overflow-x: hidden;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0D1729; }
+    ::-webkit-scrollbar-thumb { background: #1A2A44; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #243552; }
+    input, select, textarea, button { font-family: inherit; }
+    a { color: inherit; text-decoration: none; }
+
+    .app-layout { display: flex; height: 100vh; }
+    .sidebar {
+      width: 240px; min-width: 240px; background: #0D1729; border-right: 1px solid #1A2A44;
+      display: flex; flex-direction: column; overflow-y: auto;
+    }
+    .sidebar-logo { padding: 20px 20px 16px; border-bottom: 1px solid #1A2A44; }
+    .sidebar-logo h1 { font-size: 18px; font-weight: 700; color: #00E5CC; }
+    .sidebar-logo span { font-size: 11px; color: #4F5D78; text-transform: uppercase; letter-spacing: 1px; }
+    .sidebar-nav { flex: 1; padding: 12px 0; }
+    .nav-section { padding: 8px 16px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #4F5D78; margin-top: 8px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer;
+      color: #8E9AB5; transition: all 0.15s; font-size: 14px; font-weight: 500;
+      border-left: 3px solid transparent;
+    }
+    .nav-item:hover { background: rgba(0,229,204,0.05); color: #F0F4FA; }
+    .nav-item.active { color: #00E5CC; background: rgba(0,229,204,0.08); border-left-color: #00E5CC; }
+    .nav-icon { width: 18px; text-align: center; font-size: 16px; }
+    .sidebar-footer { padding: 16px 20px; border-top: 1px solid #1A2A44; }
+    .user-info { display: flex; align-items: center; gap: 10px; }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #4C7CFF, #00E5CC);
+      display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #060D1B;
+    }
+    .user-name { font-size: 13px; font-weight: 600; color: #F0F4FA; }
+    .logout-btn {
+      margin-top: 10px; width: 100%; padding: 8px; background: rgba(255,77,106,0.1); border: 1px solid rgba(255,77,106,0.2);
+      color: #FF4D6A; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.15s;
+    }
+    .logout-btn:hover { background: rgba(255,77,106,0.2); }
+
+    .main-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+    .page-header {
+      padding: 24px 32px 20px; border-bottom: 1px solid #1A2A44; background: #0D1729;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .page-header h2 { font-size: 22px; font-weight: 700; color: #F0F4FA; }
+    .page-header p { font-size: 13px; color: #8E9AB5; margin-top: 4px; }
+    .page-body { padding: 24px 32px; flex: 1; }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card {
+      background: #101D30; border: 1px solid #1A2A44; border-radius: 12px; padding: 20px;
+      border-left: 3px solid #4C7CFF; transition: transform 0.15s;
+    }
+    .stat-card:hover { transform: translateY(-2px); }
+    .stat-card.tint { border-left-color: #00E5CC; }
+    .stat-card.danger { border-left-color: #FF4D6A; }
+    .stat-card.warning { border-left-color: #FFB020; }
+    .stat-card.success { border-left-color: #00D68F; }
+    .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #4F5D78; margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #F0F4FA; }
+
+    .card {
+      background: #101D30; border: 1px solid #1A2A44; border-radius: 12px; padding: 20px;
+      margin-bottom: 16px; transition: all 0.15s;
+    }
+    .card:hover { border-color: #243552; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .card-title { font-size: 16px; font-weight: 600; color: #F0F4FA; }
+
+    .badge {
+      display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .badge.critical { background: rgba(255,77,106,0.15); color: #FF4D6A; }
+    .badge.high { background: rgba(255,176,32,0.15); color: #FFB020; }
+    .badge.medium { background: rgba(76,124,255,0.15); color: #4C7CFF; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; border: none;
+    }
+    .btn-primary { background: #00E5CC; color: #060D1B; }
+    .btn-primary:hover { background: #00B8A3; }
+    .btn-secondary { background: rgba(76,124,255,0.15); color: #4C7CFF; border: 1px solid rgba(76,124,255,0.3); }
+    .btn-secondary:hover { background: rgba(76,124,255,0.25); }
+    .btn-danger { background: rgba(255,77,106,0.15); color: #FF4D6A; border: 1px solid rgba(255,77,106,0.3); }
+    .btn-danger:hover { background: rgba(255,77,106,0.25); }
+    .btn-outline {
+      background: transparent; color: #8E9AB5; border: 1px solid #1A2A44;
+    }
+    .btn-outline:hover { border-color: #00E5CC; color: #00E5CC; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    .input {
+      width: 100%; padding: 10px 14px; background: #0D1729; border: 1px solid #1A2A44;
+      border-radius: 8px; color: #F0F4FA; font-size: 14px; outline: none; transition: border-color 0.15s;
+    }
+    .input:focus { border-color: #00E5CC; }
+    .input::placeholder { color: #4F5D78; }
+    select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%234F5D78' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+    .table { width: 100%; border-collapse: collapse; }
+    .table th { text-align: left; padding: 10px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #4F5D78; border-bottom: 1px solid #1A2A44; }
+    .table td { padding: 12px 16px; border-bottom: 1px solid #0F1D33; font-size: 14px; color: #F0F4FA; }
+    .table tr:hover td { background: rgba(0,229,204,0.03); }
+
+    .provider-card {
+      background: #101D30; border: 1px solid #1A2A44; border-radius: 12px; padding: 16px;
+      cursor: pointer; transition: all 0.15s; border-left: 3px solid #4C7CFF;
+    }
+    .provider-card:hover { border-color: #243552; transform: translateY(-1px); }
+    .provider-card.flagged { border-left-color: #FF4D6A; }
+    .provider-name { font-size: 15px; font-weight: 600; color: #F0F4FA; }
+    .provider-meta { font-size: 12px; color: #8E9AB5; margin-top: 4px; }
+    .provider-spend { font-size: 18px; font-weight: 700; color: #00E5CC; margin-top: 8px; }
+    .mini-bars { display: flex; align-items: flex-end; gap: 2px; height: 30px; margin-top: 8px; }
+    .mini-bar { flex: 1; background: #4C7CFF; border-radius: 2px 2px 0 0; min-width: 3px; transition: height 0.3s; }
+
+    .filters { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filters .input { max-width: 220px; }
+
+    .chat-container { display: flex; flex-direction: column; height: calc(100vh - 140px); }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px 0; }
+    .chat-msg { display: flex; gap: 12px; margin-bottom: 16px; }
+    .chat-msg.user { flex-direction: row-reverse; }
+    .chat-bubble {
+      max-width: 70%; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6;
+      white-space: pre-wrap; word-wrap: break-word;
+    }
+    .chat-msg.user .chat-bubble { background: #00E5CC; color: #060D1B; border-bottom-right-radius: 4px; }
+    .chat-msg.assistant .chat-bubble { background: #132035; color: #F0F4FA; border-bottom-left-radius: 4px; }
+    .chat-avatar {
+      width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .chat-msg.user .chat-avatar { background: #00E5CC; color: #060D1B; }
+    .chat-msg.assistant .chat-avatar { background: #4C7CFF; color: #fff; }
+    .chat-input-row { display: flex; gap: 10px; padding: 16px 0; border-top: 1px solid #1A2A44; }
+    .chat-input-row .input { flex: 1; }
+
+    .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 180px; padding: 0 4px; }
+    .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .bar-fill { width: 100%; background: linear-gradient(to top, #4C7CFF, #00E5CC); border-radius: 4px 4px 0 0; transition: height 0.5s ease; min-width: 20px; }
+    .bar-label { font-size: 10px; color: #4F5D78; white-space: nowrap; }
+    .bar-value { font-size: 10px; color: #8E9AB5; }
+
+    .growth-indicator { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+    .growth-indicator.up { color: #FF4D6A; }
+    .growth-indicator.down { color: #00D68F; }
+    .growth-indicator.neutral { color: #8E9AB5; }
+
+    .heatmap-card {
+      background: #101D30; border: 1px solid #1A2A44; border-radius: 12px; padding: 20px;
+      transition: all 0.15s;
+    }
+    .heatmap-card:hover { border-color: #243552; }
+    .severity-row { display: flex; gap: 12px; margin-top: 10px; }
+    .severity-dot { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+
+    .tab-row { display: flex; gap: 0; border-bottom: 1px solid #1A2A44; margin-bottom: 20px; }
+    .tab-btn {
+      padding: 10px 20px; font-size: 13px; font-weight: 600; color: #4F5D78; cursor: pointer;
+      border: none; background: none; border-bottom: 2px solid transparent; transition: all 0.15s;
+    }
+    .tab-btn:hover { color: #8E9AB5; }
+    .tab-btn.active { color: #00E5CC; border-bottom-color: #00E5CC; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: #4F5D78; }
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-state p { font-size: 14px; }
+
+    .loading { display: flex; justify-content: center; align-items: center; padding: 60px; }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid #1A2A44; border-top-color: #00E5CC;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .auth-container {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #060D1B 0%, #0D1729 50%, #060D1B 100%);
+    }
+    .auth-card {
+      background: #101D30; border: 1px solid #1A2A44; border-radius: 16px; padding: 40px;
+      width: 100%; max-width: 420px;
+    }
+    .auth-card h1 { font-size: 28px; font-weight: 700; color: #00E5CC; margin-bottom: 4px; }
+    .auth-card .subtitle { font-size: 13px; color: #8E9AB5; margin-bottom: 28px; }
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; color: #8E9AB5; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .auth-toggle { text-align: center; margin-top: 20px; font-size: 13px; color: #8E9AB5; }
+    .auth-toggle a { color: #00E5CC; cursor: pointer; font-weight: 600; }
+    .auth-toggle a:hover { text-decoration: underline; }
+    .error-msg { background: rgba(255,77,106,0.1); border: 1px solid rgba(255,77,106,0.2); color: #FF4D6A; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+
+    .plan-card {
+      background: #101D30; border: 1px solid #1A2A44; border-radius: 16px; padding: 28px;
+      text-align: center; transition: all 0.2s; position: relative; overflow: hidden;
+    }
+    .plan-card:hover { border-color: #00E5CC; transform: translateY(-4px); }
+    .plan-card.featured { border-color: #00E5CC; }
+    .plan-card.featured::before {
+      content: 'POPULAR'; position: absolute; top: 12px; right: -28px; background: #00E5CC;
+      color: #060D1B; font-size: 10px; font-weight: 700; padding: 4px 32px; transform: rotate(45deg);
+    }
+    .plan-price { font-size: 36px; font-weight: 700; color: #F0F4FA; margin: 12px 0; }
+    .plan-price span { font-size: 14px; color: #8E9AB5; font-weight: 400; }
+    .plan-features { list-style: none; text-align: left; margin: 20px 0; }
+    .plan-features li { padding: 6px 0; font-size: 13px; color: #8E9AB5; display: flex; align-items: center; gap: 8px; }
+    .plan-features li::before { content: '✓'; color: #00E5CC; font-weight: 700; }
+
+    .activity-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid #0F1D33; }
+    .activity-icon {
+      width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .activity-text { font-size: 13px; color: #F0F4FA; }
+    .activity-time { font-size: 11px; color: #4F5D78; margin-top: 2px; }
+
+    .note-item { background: #0D1729; border: 1px solid #1A2A44; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+    .note-content { font-size: 13px; color: #F0F4FA; line-height: 1.5; white-space: pre-wrap; }
+    .note-meta { font-size: 11px; color: #4F5D78; margin-top: 6px; display: flex; justify-content: space-between; }
+
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(6,13,27,0.8); display: flex; align-items: center;
+      justify-content: center; z-index: 100; backdrop-filter: blur(4px);
+    }
+    .modal-content {
+      background: #101D30; border: 1px solid #1A2A44; border-radius: 16px; padding: 28px;
+      max-width: 480px; width: 90%;
+    }
+    .modal-content h3 { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #F0F4FA; }
+
+    .compare-grid { display: grid; gap: 16px; }
+    .checkbox-item { display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-radius: 8px; }
+    .checkbox-item:hover { background: rgba(0,229,204,0.05); }
+    .checkbox { width: 18px; height: 18px; border: 2px solid #1A2A44; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .checkbox.checked { background: #00E5CC; border-color: #00E5CC; color: #060D1B; font-size: 12px; font-weight: 700; }
+
+    .range-slider { width: 100%; accent-color: #00E5CC; }
+
+    .conversations-list { border-right: 1px solid #1A2A44; width: 240px; overflow-y: auto; }
+    .conv-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #0F1D33; font-size: 13px; color: #8E9AB5; }
+    .conv-item:hover { background: rgba(0,229,204,0.05); }
+    .conv-item.active { background: rgba(0,229,204,0.08); color: #00E5CC; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .page-body { padding: 16px; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .filters { flex-direction: column; }
+      .filters .input { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef, createContext, useContext, useMemo } = React;
+
+    const API = '';
+
+    async function apiFetch(url, opts = {}) {
+      const res = await fetch(API + url, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+        ...opts,
+      });
+      if (res.status === 401) {
+        window.__authLogout && window.__authLogout();
+        throw new Error('Not authenticated');
+      }
+      return res;
+    }
+
+    async function apiJson(url, opts) {
+      const res = await apiFetch(url, opts);
+      return res.json();
+    }
+
+    const AuthContext = createContext(null);
+
+    function AuthProvider({ children }) {
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/user').then(u => setUser(u)).catch(() => setUser(null)).finally(() => setLoading(false));
+      }, []);
+
+      const login = async (username, password) => {
+        const res = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        setUser(data);
+      };
+
+      const register = async (username, password) => {
+        const res = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify({ username, password }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        setUser(data);
+      };
+
+      const logout = async () => {
+        await apiFetch('/api/logout', { method: 'POST' });
+        setUser(null);
+      };
+
+      window.__authLogout = () => setUser(null);
+
+      if (loading) return React.createElement('div', { className: 'auth-container' },
+        React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }))
+      );
+
+      return React.createElement(AuthContext.Provider, { value: { user, login, register, logout } }, children);
+    }
+
+    function useAuth() { return useContext(AuthContext); }
+
+    function formatCurrency(n) {
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      return '$' + n.toLocaleString();
+    }
+    function formatDate(d) { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    function formatMonth(m) { return new Date(m).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }); }
+    function timeAgo(d) {
+      const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s/60) + 'm ago';
+      if (s < 86400) return Math.floor(s/3600) + 'h ago';
+      return Math.floor(s/86400) + 'd ago';
+    }
+
+    function AuthScreen() {
+      const { login, register } = useAuth();
+      const [isLogin, setIsLogin] = useState(true);
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+          if (isLogin) await login(username, password);
+          else await register(username, password);
+        } catch (err) {
+          setError(err.message);
+        }
+        setLoading(false);
+      };
+
+      return React.createElement('div', { className: 'auth-container' },
+        React.createElement('div', { className: 'auth-card' },
+          React.createElement('h1', null, 'MedicaidSleuth'),
+          React.createElement('p', { className: 'subtitle' }, isLogin ? 'Sign in to your investigation dashboard' : 'Create your investigator account'),
+          error && React.createElement('div', { className: 'error-msg' }, error),
+          React.createElement('form', { onSubmit: handleSubmit },
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Username'),
+              React.createElement('input', { className: 'input', value: username, onChange: e => setUsername(e.target.value), placeholder: 'Enter username', autoFocus: true })
+            ),
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Password'),
+              React.createElement('input', { className: 'input', type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: 'Enter password' })
+            ),
+            React.createElement('button', { className: 'btn btn-primary', style: { width: '100%', justifyContent: 'center', marginTop: 8 }, disabled: loading },
+              loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')
+            )
+          ),
+          React.createElement('div', { className: 'auth-toggle' },
+            isLogin ? 'Don\'t have an account? ' : 'Already have an account? ',
+            React.createElement('a', { onClick: () => { setIsLogin(!isLogin); setError(''); } }, isLogin ? 'Sign Up' : 'Sign In')
+          )
+        )
+      );
+    }
+
+    function Sidebar({ page, setPage }) {
+      const { user, logout } = useAuth();
+      const mainNav = [
+        { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+        { id: 'explorer', icon: '🔍', label: 'Explorer' },
+        { id: 'scanner', icon: '🛡️', label: 'Scanner' },
+        { id: 'assistant', icon: '🤖', label: 'Assistant' },
+      ];
+      const toolsNav = [
+        { id: 'watchlist', icon: '⭐', label: 'Watchlist' },
+        { id: 'compare', icon: '📈', label: 'Compare' },
+        { id: 'heatmap', icon: '🗺️', label: 'Heatmap' },
+        { id: 'shared', icon: '📤', label: 'Shared Findings' },
+        { id: 'saved-searches', icon: '💾', label: 'Saved Searches' },
+        { id: 'activity', icon: '📋', label: 'Activity Feed' },
+      ];
+      const settingsNav = [
+        { id: 'settings', icon: '⚙️', label: 'Settings' },
+        { id: 'plans', icon: '💳', label: 'Plans' },
+      ];
+
+      return React.createElement('div', { className: 'sidebar' },
+        React.createElement('div', { className: 'sidebar-logo' },
+          React.createElement('h1', null, 'MedicaidSleuth'),
+          React.createElement('span', null, 'Fraud Detection')
+        ),
+        React.createElement('div', { className: 'sidebar-nav' },
+          React.createElement('div', { className: 'nav-section' }, 'Main'),
+          mainNav.map(n => React.createElement('div', { key: n.id, className: 'nav-item' + (page === n.id ? ' active' : ''), onClick: () => setPage(n.id) },
+            React.createElement('span', { className: 'nav-icon' }, n.icon), n.label
+          )),
+          React.createElement('div', { className: 'nav-section' }, 'Tools'),
+          toolsNav.map(n => React.createElement('div', { key: n.id, className: 'nav-item' + (page === n.id ? ' active' : ''), onClick: () => setPage(n.id) },
+            React.createElement('span', { className: 'nav-icon' }, n.icon), n.label
+          )),
+          React.createElement('div', { className: 'nav-section' }, 'Account'),
+          settingsNav.map(n => React.createElement('div', { key: n.id, className: 'nav-item' + (page === n.id ? ' active' : ''), onClick: () => setPage(n.id) },
+            React.createElement('span', { className: 'nav-icon' }, n.icon), n.label
+          ))
+        ),
+        React.createElement('div', { className: 'sidebar-footer' },
+          React.createElement('div', { className: 'user-info' },
+            React.createElement('div', { className: 'user-avatar' }, user?.username?.[0]?.toUpperCase() || '?'),
+            React.createElement('div', { className: 'user-name' }, user?.username || 'User')
+          ),
+          React.createElement('button', { className: 'logout-btn', onClick: logout }, 'Sign Out')
+        )
+      );
+    }
+
+    function BarChart({ data, height = 180 }) {
+      if (!data || data.length === 0) return null;
+      const max = Math.max(...data.map(d => d.total));
+      return React.createElement('div', { className: 'bar-chart', style: { height } },
+        data.map((d, i) => React.createElement('div', { key: i, className: 'bar-col' },
+          React.createElement('div', { className: 'bar-value' }, formatCurrency(d.total)),
+          React.createElement('div', { className: 'bar-fill', style: { height: max > 0 ? (d.total / max * (height - 40)) + 'px' : '2px' } }),
+          React.createElement('div', { className: 'bar-label' }, formatMonth(d.month))
+        ))
+      );
+    }
+
+    function DashboardPage({ setPage, setProviderId }) {
+      const [stats, setStats] = useState(null);
+      const [alerts, setAlerts] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        Promise.all([apiJson('/api/stats'), apiJson('/api/scan')]).then(([s, a]) => {
+          setStats(s); setAlerts(a.slice(0, 8));
+        }).finally(() => setLoading(false));
+      }, []);
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Dashboard'),
+          React.createElement('p', null, 'Medicaid spending overview and fraud alerts')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { className: 'stat-grid' },
+            React.createElement('div', { className: 'stat-card' },
+              React.createElement('div', { className: 'stat-label' }, 'Total Claims'),
+              React.createElement('div', { className: 'stat-value' }, stats?.totalClaims?.toLocaleString())
+            ),
+            React.createElement('div', { className: 'stat-card tint' },
+              React.createElement('div', { className: 'stat-label' }, 'Providers'),
+              React.createElement('div', { className: 'stat-value' }, stats?.totalProviders)
+            ),
+            React.createElement('div', { className: 'stat-card success' },
+              React.createElement('div', { className: 'stat-label' }, 'Total Spending'),
+              React.createElement('div', { className: 'stat-value' }, formatCurrency(stats?.totalSpend || 0))
+            ),
+            React.createElement('div', { className: 'stat-card warning' },
+              React.createElement('div', { className: 'stat-label' }, 'States'),
+              React.createElement('div', { className: 'stat-value' }, stats?.totalStates)
+            ),
+            React.createElement('div', { className: 'stat-card danger' },
+              React.createElement('div', { className: 'stat-label' }, 'Flagged Providers'),
+              React.createElement('div', { className: 'stat-value' }, stats?.flaggedProviders)
+            ),
+            React.createElement('div', { className: 'stat-card danger' },
+              React.createElement('div', { className: 'stat-label' }, 'Total Alerts'),
+              React.createElement('div', { className: 'stat-value' }, stats?.totalAlerts)
+            )
+          ),
+          React.createElement('div', { className: 'card' },
+            React.createElement('div', { className: 'card-header' },
+              React.createElement('div', { className: 'card-title' }, 'Top Fraud Alerts'),
+              React.createElement('button', { className: 'btn btn-sm btn-secondary', onClick: () => setPage('scanner') }, 'View All')
+            ),
+            React.createElement('table', { className: 'table' },
+              React.createElement('thead', null,
+                React.createElement('tr', null,
+                  React.createElement('th', null, 'Provider'),
+                  React.createElement('th', null, 'State'),
+                  React.createElement('th', null, 'Growth'),
+                  React.createElement('th', null, 'Amount'),
+                  React.createElement('th', null, 'Severity')
+                )
+              ),
+              React.createElement('tbody', null,
+                alerts.map((a, i) => React.createElement('tr', { key: i, style: { cursor: 'pointer' }, onClick: () => { setProviderId(a.provider_id); setPage('provider'); } },
+                  React.createElement('td', null, a.provider_name),
+                  React.createElement('td', null, a.state_name),
+                  React.createElement('td', null, React.createElement('span', { className: 'growth-indicator up' }, '↑ ' + a.growth_percent.toFixed(0) + '%')),
+                  React.createElement('td', null, formatCurrency(a.monthly_total)),
+                  React.createElement('td', null, React.createElement('span', { className: 'badge ' + a.severity }, a.severity))
+                ))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    function ExplorerPage({ setPage, setProviderId }) {
+      const [providers, setProviders] = useState([]);
+      const [states, setStates] = useState([]);
+      const [procedures, setProcedures] = useState([]);
+      const [stateFilter, setStateFilter] = useState('');
+      const [codeFilter, setCodeFilter] = useState('');
+      const [loading, setLoading] = useState(true);
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        Promise.all([apiJson('/api/providers'), apiJson('/api/states'), apiJson('/api/procedures'), apiJson('/api/scan')])
+          .then(([p, s, c, alerts]) => {
+            const flaggedIds = new Set(alerts.map(a => a.provider_id));
+            setProviders(p.map(pr => ({ ...pr, isFlagged: flaggedIds.has(pr.id) })));
+            setStates(s); setProcedures(c);
+          }).finally(() => setLoading(false));
+      }, []);
+
+      const filtered = useMemo(() => {
+        let f = [...providers];
+        if (stateFilter) f = f.filter(p => p.state_code === stateFilter);
+        if (codeFilter) f = f.filter(p => p.procedure_code === codeFilter);
+        return f;
+      }, [providers, stateFilter, codeFilter]);
+
+      const saveSearch = async () => {
+        if (!stateFilter && !codeFilter) return;
+        setSaving(true);
+        const name = [stateFilter, codeFilter].filter(Boolean).join(' / ') || 'Search';
+        await apiFetch('/api/saved-searches', { method: 'POST', body: JSON.stringify({ name, stateCode: stateFilter, procedureCode: codeFilter }) });
+        setSaving(false);
+        alert('Search saved!');
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Explorer'),
+          React.createElement('p', null, 'Browse and filter Medicaid providers')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { className: 'filters' },
+            React.createElement('select', { className: 'input', value: stateFilter, onChange: e => setStateFilter(e.target.value) },
+              React.createElement('option', { value: '' }, 'All States'),
+              states.map(s => React.createElement('option', { key: s.code, value: s.code }, s.name))
+            ),
+            React.createElement('select', { className: 'input', value: codeFilter, onChange: e => setCodeFilter(e.target.value) },
+              React.createElement('option', { value: '' }, 'All Procedures'),
+              procedures.map(p => React.createElement('option', { key: p.code, value: p.code }, p.code + ' - ' + p.desc))
+            ),
+            (stateFilter || codeFilter) && React.createElement('button', { className: 'btn btn-sm btn-secondary', onClick: saveSearch, disabled: saving }, saving ? 'Saving...' : '💾 Save Search')
+          ),
+          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 } },
+            filtered.map(p => React.createElement('div', {
+              key: p.id, className: 'provider-card' + (p.isFlagged ? ' flagged' : ''),
+              onClick: () => { setProviderId(p.id); setPage('provider'); }
+            },
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
+                React.createElement('div', null,
+                  React.createElement('div', { className: 'provider-name' }, p.name),
+                  React.createElement('div', { className: 'provider-meta' }, p.state_name + ' · ' + p.procedure_code + ' · ' + p.claimCount + ' claims')
+                ),
+                p.isFlagged && React.createElement('span', { className: 'badge critical' }, 'FLAGGED')
+              ),
+              React.createElement('div', { className: 'provider-spend' }, formatCurrency(p.totalSpend))
+            ))
+          )
+        )
+      );
+    }
+
+    function ScannerPage({ setPage, setProviderId }) {
+      const [results, setResults] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/scan').then(setResults).finally(() => setLoading(false));
+      }, []);
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      const criticalCount = results.filter(r => r.severity === 'critical').length;
+      const highCount = results.filter(r => r.severity === 'high').length;
+      const mediumCount = results.filter(r => r.severity === 'medium').length;
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Fraud Scanner'),
+          React.createElement('p', null, 'Automated billing anomaly detection')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { className: 'stat-grid' },
+            React.createElement('div', { className: 'stat-card danger' },
+              React.createElement('div', { className: 'stat-label' }, 'Critical'),
+              React.createElement('div', { className: 'stat-value' }, criticalCount)
+            ),
+            React.createElement('div', { className: 'stat-card warning' },
+              React.createElement('div', { className: 'stat-label' }, 'High'),
+              React.createElement('div', { className: 'stat-value' }, highCount)
+            ),
+            React.createElement('div', { className: 'stat-card' },
+              React.createElement('div', { className: 'stat-label' }, 'Medium'),
+              React.createElement('div', { className: 'stat-value' }, mediumCount)
+            ),
+            React.createElement('div', { className: 'stat-card tint' },
+              React.createElement('div', { className: 'stat-label' }, 'Total Alerts'),
+              React.createElement('div', { className: 'stat-value' }, results.length)
+            )
+          ),
+          React.createElement('div', { style: { display: 'flex', gap: 12, marginBottom: 16 } },
+            React.createElement('a', { href: '/api/export/csv', className: 'btn btn-sm btn-secondary', download: true }, '📥 Export CSV')
+          ),
+          React.createElement('div', { className: 'card', style: { padding: 0, overflow: 'hidden' } },
+            React.createElement('table', { className: 'table' },
+              React.createElement('thead', null,
+                React.createElement('tr', null,
+                  React.createElement('th', null, 'Severity'),
+                  React.createElement('th', null, 'Provider'),
+                  React.createElement('th', null, 'State'),
+                  React.createElement('th', null, 'Procedure'),
+                  React.createElement('th', null, 'Month'),
+                  React.createElement('th', null, 'Growth'),
+                  React.createElement('th', null, 'Amount'),
+                  React.createElement('th', null, 'Prev Amount')
+                )
+              ),
+              React.createElement('tbody', null,
+                results.map((r, i) => React.createElement('tr', { key: i, style: { cursor: 'pointer' }, onClick: () => { setProviderId(r.provider_id); setPage('provider'); } },
+                  React.createElement('td', null, React.createElement('span', { className: 'badge ' + r.severity }, r.severity)),
+                  React.createElement('td', null, r.provider_name),
+                  React.createElement('td', null, r.state_name),
+                  React.createElement('td', null, r.procedure_code),
+                  React.createElement('td', null, formatMonth(r.month)),
+                  React.createElement('td', null, React.createElement('span', { className: 'growth-indicator up' }, '↑ ' + r.growth_percent.toFixed(0) + '%')),
+                  React.createElement('td', null, formatCurrency(r.monthly_total)),
+                  React.createElement('td', null, formatCurrency(r.prev_month_total))
+                ))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    function ProviderDetailPage({ providerId, setPage, setProviderId }) {
+      const [provider, setProvider] = useState(null);
+      const [isWatched, setIsWatched] = useState(false);
+      const [notes, setNotes] = useState([]);
+      const [newNote, setNewNote] = useState('');
+      const [showShare, setShowShare] = useState(false);
+      const [shareUser, setShareUser] = useState('');
+      const [shareMsg, setShareMsg] = useState('');
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        if (!providerId) return;
+        Promise.all([
+          apiJson('/api/providers/' + providerId),
+          apiJson('/api/watchlist/check/' + providerId),
+          apiJson('/api/case-notes/' + providerId)
+        ]).then(([p, w, n]) => {
+          setProvider(p); setIsWatched(w.isWatched); setNotes(n);
+        }).finally(() => setLoading(false));
+      }, [providerId]);
+
+      const toggleWatch = async () => {
+        if (isWatched) {
+          await apiFetch('/api/watchlist/' + providerId, { method: 'DELETE' });
+        } else {
+          await apiFetch('/api/watchlist', { method: 'POST', body: JSON.stringify({ providerId, providerName: provider.name, stateCode: provider.state_code, procedureCode: provider.procedure_code }) });
+        }
+        setIsWatched(!isWatched);
+      };
+
+      const addNote = async () => {
+        if (!newNote.trim()) return;
+        const res = await apiJson('/api/case-notes', { method: 'POST', body: JSON.stringify({ providerId, content: newNote }) });
+        setNotes([res, ...notes]);
+        setNewNote('');
+      };
+
+      const deleteNote = async (id) => {
+        await apiFetch('/api/case-notes/' + id, { method: 'DELETE' });
+        setNotes(notes.filter(n => n.id !== id));
+      };
+
+      const shareFinding = async () => {
+        if (!shareUser.trim()) return;
+        try {
+          await apiFetch('/api/shared-findings', { method: 'POST', body: JSON.stringify({ toUsername: shareUser, providerId, providerName: provider.name, message: shareMsg }) });
+          setShowShare(false); setShareUser(''); setShareMsg('');
+          alert('Finding shared!');
+        } catch (err) { alert('Failed to share'); }
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+      if (!provider) return React.createElement('div', { className: 'empty-state' }, React.createElement('p', null, 'Provider not found'));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            React.createElement('div', null,
+              React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
+                React.createElement('button', { className: 'btn btn-sm btn-outline', onClick: () => setPage('explorer') }, '← Back'),
+                React.createElement('h2', null, provider.name),
+                provider.isFlagged && React.createElement('span', { className: 'badge critical' }, 'FLAGGED')
+              ),
+              React.createElement('p', null, provider.state_name + ' · ' + provider.procedure_desc + ' (' + provider.procedure_code + ')')
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: 8 } },
+              React.createElement('button', { className: 'btn btn-sm ' + (isWatched ? 'btn-primary' : 'btn-outline'), onClick: toggleWatch }, isWatched ? '⭐ Watched' : '☆ Watch'),
+              React.createElement('button', { className: 'btn btn-sm btn-secondary', onClick: () => setShowShare(true) }, '📤 Share'),
+              React.createElement('a', { href: '/api/export/csv', className: 'btn btn-sm btn-outline', download: true }, '📥 Export')
+            )
+          )
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { className: 'stat-grid' },
+            React.createElement('div', { className: 'stat-card tint' },
+              React.createElement('div', { className: 'stat-label' }, 'Total Spend'),
+              React.createElement('div', { className: 'stat-value' }, formatCurrency(provider.totalSpend))
+            ),
+            React.createElement('div', { className: 'stat-card' },
+              React.createElement('div', { className: 'stat-label' }, 'Claims'),
+              React.createElement('div', { className: 'stat-value' }, provider.claimCount)
+            ),
+            React.createElement('div', { className: 'stat-card danger' },
+              React.createElement('div', { className: 'stat-label' }, 'Alerts'),
+              React.createElement('div', { className: 'stat-value' }, provider.fraudAlerts?.length || 0)
+            )
+          ),
+          React.createElement('div', { className: 'card' },
+            React.createElement('div', { className: 'card-title', style: { marginBottom: 16 } }, 'Monthly Billing Trend'),
+            React.createElement(BarChart, { data: provider.monthlyTotals })
+          ),
+          provider.fraudAlerts?.length > 0 && React.createElement('div', { className: 'card' },
+            React.createElement('div', { className: 'card-title', style: { marginBottom: 12 } }, 'Fraud Alerts'),
+            provider.fraudAlerts.map((a, i) => React.createElement('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #0F1D33' } },
+              React.createElement('div', null,
+                React.createElement('span', { className: 'badge ' + a.severity, style: { marginRight: 8 } }, a.severity),
+                formatMonth(a.month)
+              ),
+              React.createElement('span', { className: 'growth-indicator up' }, '↑ ' + a.growth_percent.toFixed(0) + '% · ' + formatCurrency(a.monthly_total))
+            ))
+          ),
+          React.createElement('div', { className: 'card' },
+            React.createElement('div', { className: 'card-title', style: { marginBottom: 12 } }, 'Case Notes'),
+            React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: 12 } },
+              React.createElement('textarea', { className: 'input', value: newNote, onChange: e => setNewNote(e.target.value), placeholder: 'Add investigation notes...', rows: 2, style: { flex: 1, resize: 'vertical' } }),
+              React.createElement('button', { className: 'btn btn-primary', onClick: addNote, style: { alignSelf: 'flex-end' } }, 'Add')
+            ),
+            notes.length === 0 ? React.createElement('div', { style: { color: '#4F5D78', fontSize: 13 } }, 'No case notes yet') :
+            notes.map(n => React.createElement('div', { key: n.id, className: 'note-item' },
+              React.createElement('div', { className: 'note-content' }, n.content),
+              React.createElement('div', { className: 'note-meta' },
+                React.createElement('span', null, formatDate(n.createdAt)),
+                React.createElement('button', { className: 'btn btn-sm btn-danger', onClick: () => deleteNote(n.id), style: { padding: '2px 8px' } }, '✕')
+              )
+            ))
+          )
+        ),
+        showShare && React.createElement('div', { className: 'modal-overlay', onClick: () => setShowShare(false) },
+          React.createElement('div', { className: 'modal-content', onClick: e => e.stopPropagation() },
+            React.createElement('h3', null, 'Share Finding'),
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Recipient Username'),
+              React.createElement('input', { className: 'input', value: shareUser, onChange: e => setShareUser(e.target.value), placeholder: 'Enter username' })
+            ),
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Message (optional)'),
+              React.createElement('textarea', { className: 'input', value: shareMsg, onChange: e => setShareMsg(e.target.value), placeholder: 'Add a note...', rows: 3 })
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } },
+              React.createElement('button', { className: 'btn btn-outline', onClick: () => setShowShare(false) }, 'Cancel'),
+              React.createElement('button', { className: 'btn btn-primary', onClick: shareFinding }, 'Share')
+            )
+          )
+        )
+      );
+    }
+
+    function AssistantPage() {
+      const [conversations, setConversations] = useState([]);
+      const [activeConv, setActiveConv] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState('');
+      const [streaming, setStreaming] = useState(false);
+      const messagesEndRef = useRef(null);
+
+      useEffect(() => {
+        apiJson('/api/conversations').then(setConversations);
+      }, []);
+
+      const loadConv = async (id) => {
+        const data = await apiJson('/api/conversations/' + id);
+        setActiveConv(data);
+        setMessages(data.messages || []);
+      };
+
+      const newConv = async () => {
+        const conv = await apiJson('/api/conversations', { method: 'POST', body: JSON.stringify({ title: 'New Chat' }) });
+        setConversations([conv, ...conversations]);
+        setActiveConv(conv);
+        setMessages([]);
+      };
+
+      const deleteConv = async (id) => {
+        await apiFetch('/api/conversations/' + id, { method: 'DELETE' });
+        setConversations(conversations.filter(c => c.id !== id));
+        if (activeConv?.id === id) { setActiveConv(null); setMessages([]); }
+      };
+
+      const sendMessage = async () => {
+        if (!input.trim() || streaming) return;
+        if (!activeConv) await newConv();
+        const convId = activeConv?.id;
+        if (!convId) return;
+
+        const userMsg = { role: 'user', content: input };
+        setMessages(prev => [...prev, userMsg]);
+        setInput('');
+        setStreaming(true);
+
+        try {
+          const res = await fetch('/api/conversations/' + convId + '/messages', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: input })
+          });
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let assistantContent = '';
+          setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value);
+            const lines = text.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.content) {
+                    assistantContent += data.content;
+                    setMessages(prev => {
+                      const updated = [...prev];
+                      updated[updated.length - 1] = { role: 'assistant', content: assistantContent };
+                      return updated;
+                    });
+                  }
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (err) {
+          setMessages(prev => [...prev, { role: 'assistant', content: 'Error: Failed to get response' }]);
+        }
+        setStreaming(false);
+      };
+
+      useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages]);
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Sleuth AI Assistant'),
+          React.createElement('p', null, 'AI-powered fraud analysis and investigation support')
+        ),
+        React.createElement('div', { style: { display: 'flex', flex: 1, overflow: 'hidden' } },
+          React.createElement('div', { className: 'conversations-list' },
+            React.createElement('div', { style: { padding: 12 } },
+              React.createElement('button', { className: 'btn btn-primary btn-sm', style: { width: '100%', justifyContent: 'center' }, onClick: newConv }, '+ New Chat')
+            ),
+            conversations.map(c => React.createElement('div', { key: c.id, className: 'conv-item' + (activeConv?.id === c.id ? ' active' : ''), onClick: () => loadConv(c.id) },
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                React.createElement('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, c.title),
+                React.createElement('button', { onClick: e => { e.stopPropagation(); deleteConv(c.id); }, style: { background: 'none', border: 'none', color: '#4F5D78', cursor: 'pointer', fontSize: 14 } }, '✕')
+              )
+            ))
+          ),
+          React.createElement('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', padding: '0 24px' } },
+            React.createElement('div', { className: 'chat-messages' },
+              messages.length === 0 && React.createElement('div', { className: 'empty-state' },
+                React.createElement('div', { className: 'icon' }, '🤖'),
+                React.createElement('p', null, 'Start a conversation with Sleuth AI to analyze fraud patterns')
+              ),
+              messages.map((m, i) => React.createElement('div', { key: i, className: 'chat-msg ' + m.role },
+                React.createElement('div', { className: 'chat-avatar' }, m.role === 'user' ? '👤' : '🤖'),
+                React.createElement('div', { className: 'chat-bubble' }, m.content)
+              )),
+              React.createElement('div', { ref: messagesEndRef })
+            ),
+            React.createElement('div', { className: 'chat-input-row' },
+              React.createElement('input', { className: 'input', value: input, onChange: e => setInput(e.target.value), placeholder: 'Ask about fraud patterns, procedure codes, investigations...', onKeyDown: e => e.key === 'Enter' && sendMessage() }),
+              React.createElement('button', { className: 'btn btn-primary', onClick: sendMessage, disabled: streaming }, streaming ? '...' : 'Send')
+            )
+          )
+        )
+      );
+    }
+
+    function WatchlistPage({ setPage, setProviderId }) {
+      const [items, setItems] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/watchlist').then(setItems).finally(() => setLoading(false));
+      }, []);
+
+      const remove = async (providerId) => {
+        await apiFetch('/api/watchlist/' + providerId, { method: 'DELETE' });
+        setItems(items.filter(i => i.providerId !== providerId));
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Watchlist'),
+          React.createElement('p', null, 'Providers you\'re tracking for investigation')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          items.length === 0 ? React.createElement('div', { className: 'empty-state' },
+            React.createElement('div', { className: 'icon' }, '⭐'),
+            React.createElement('p', null, 'No providers in your watchlist yet. Add providers from the Explorer.')
+          ) :
+          items.map(item => React.createElement('div', { key: item.id, className: 'card', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }, onClick: () => { setProviderId(item.providerId); setPage('provider'); } },
+            React.createElement('div', null,
+              React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                React.createElement('span', { style: { fontWeight: 600, fontSize: 15 } }, item.providerName),
+                item.isFlagged && React.createElement('span', { className: 'badge critical' }, 'FLAGGED')
+              ),
+              React.createElement('div', { style: { fontSize: 12, color: '#8E9AB5', marginTop: 4 } }, item.stateCode + ' · ' + item.procedureCode + ' · Added ' + formatDate(item.addedAt))
+            ),
+            React.createElement('button', { className: 'btn btn-sm btn-danger', onClick: e => { e.stopPropagation(); remove(item.providerId); } }, 'Remove')
+          ))
+        )
+      );
+    }
+
+    function SavedSearchesPage({ setPage, setProviderId }) {
+      const [searches, setSearches] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/saved-searches').then(setSearches).finally(() => setLoading(false));
+      }, []);
+
+      const remove = async (id) => {
+        await apiFetch('/api/saved-searches/' + id, { method: 'DELETE' });
+        setSearches(searches.filter(s => s.id !== id));
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Saved Searches'),
+          React.createElement('p', null, 'Your saved filter combinations')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          searches.length === 0 ? React.createElement('div', { className: 'empty-state' },
+            React.createElement('div', { className: 'icon' }, '💾'),
+            React.createElement('p', null, 'No saved searches. Save filter combinations from the Explorer.')
+          ) :
+          searches.map(s => React.createElement('div', { key: s.id, className: 'card', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            React.createElement('div', null,
+              React.createElement('div', { style: { fontWeight: 600, fontSize: 15 } }, s.name),
+              React.createElement('div', { style: { fontSize: 12, color: '#8E9AB5', marginTop: 4 } },
+                [s.stateCode && 'State: ' + s.stateCode, s.procedureCode && 'Code: ' + s.procedureCode].filter(Boolean).join(' · ') + ' · Saved ' + formatDate(s.createdAt)
+              )
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: 8 } },
+              React.createElement('button', { className: 'btn btn-sm btn-secondary', onClick: () => setPage('explorer') }, 'Apply'),
+              React.createElement('button', { className: 'btn btn-sm btn-danger', onClick: () => remove(s.id) }, '✕')
+            )
+          ))
+        )
+      );
+    }
+
+    function ActivityPage() {
+      const [logs, setLogs] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/activity').then(setLogs).finally(() => setLoading(false));
+      }, []);
+
+      const actionIcons = {
+        added_to_watchlist: { icon: '⭐', bg: 'rgba(255,176,32,0.15)' },
+        removed_from_watchlist: { icon: '⭐', bg: 'rgba(255,77,106,0.15)' },
+        saved_search: { icon: '💾', bg: 'rgba(76,124,255,0.15)' },
+        added_case_note: { icon: '📝', bg: 'rgba(0,229,204,0.15)' },
+        updated_settings: { icon: '⚙️', bg: 'rgba(142,154,181,0.15)' },
+        shared_finding: { icon: '📤', bg: 'rgba(76,124,255,0.15)' },
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Activity Feed'),
+          React.createElement('p', null, 'Your recent investigation activity')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          logs.length === 0 ? React.createElement('div', { className: 'empty-state' },
+            React.createElement('div', { className: 'icon' }, '📋'),
+            React.createElement('p', null, 'No activity yet. Start exploring providers to build your activity history.')
+          ) :
+          logs.map(log => {
+            const ac = actionIcons[log.action] || { icon: '📌', bg: 'rgba(142,154,181,0.15)' };
+            return React.createElement('div', { key: log.id, className: 'activity-item' },
+              React.createElement('div', { className: 'activity-icon', style: { background: ac.bg } }, ac.icon),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'activity-text' }, log.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + (log.entityId ? ' · ' + log.entityId : '')),
+                React.createElement('div', { className: 'activity-time' }, timeAgo(log.createdAt))
+              )
+            );
+          })
+        )
+      );
+    }
+
+    function ComparePage({ setPage, setProviderId }) {
+      const [providers, setProviders] = useState([]);
+      const [selected, setSelected] = useState([]);
+      const [compareData, setCompareData] = useState(null);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/providers').then(setProviders).finally(() => setLoading(false));
+      }, []);
+
+      const toggleSelect = (id) => {
+        setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 4 ? [...prev, id] : prev);
+      };
+
+      const runCompare = async () => {
+        if (selected.length < 2) return;
+        const data = await apiJson('/api/compare?ids=' + selected.join(','));
+        setCompareData(data);
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Compare Providers'),
+          React.createElement('p', null, 'Select 2-4 providers for side-by-side analysis')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          !compareData ? React.createElement(React.Fragment, null,
+            React.createElement('div', { style: { marginBottom: 16 } },
+              React.createElement('button', { className: 'btn btn-primary', onClick: runCompare, disabled: selected.length < 2 }, 'Compare (' + selected.length + '/4 selected)')
+            ),
+            providers.map(p => React.createElement('div', { key: p.id, className: 'checkbox-item', onClick: () => toggleSelect(p.id) },
+              React.createElement('div', { className: 'checkbox' + (selected.includes(p.id) ? ' checked' : '') }, selected.includes(p.id) ? '✓' : ''),
+              React.createElement('div', null,
+                React.createElement('div', { style: { fontWeight: 600 } }, p.name),
+                React.createElement('div', { style: { fontSize: 12, color: '#8E9AB5' } }, p.state_name + ' · ' + p.procedure_code)
+              )
+            ))
+          ) : React.createElement(React.Fragment, null,
+            React.createElement('button', { className: 'btn btn-sm btn-outline', onClick: () => setCompareData(null), style: { marginBottom: 16 } }, '← Back to Selection'),
+            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 } },
+              compareData.map(p => React.createElement('div', { key: p.id, className: 'card', style: { cursor: 'pointer' }, onClick: () => { setProviderId(p.id); setPage('provider'); } },
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 } },
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { fontWeight: 600, fontSize: 15 } }, p.name),
+                    React.createElement('div', { style: { fontSize: 12, color: '#8E9AB5' } }, p.state_name)
+                  ),
+                  p.isFlagged && React.createElement('span', { className: 'badge critical' }, 'FLAGGED')
+                ),
+                React.createElement('div', { className: 'stat-grid', style: { gridTemplateColumns: '1fr 1fr', gap: 8 } },
+                  React.createElement('div', null,
+                    React.createElement('div', { className: 'stat-label' }, 'Total Spend'),
+                    React.createElement('div', { style: { fontWeight: 700, fontSize: 18, color: '#00E5CC' } }, formatCurrency(p.totalSpend))
+                  ),
+                  React.createElement('div', null,
+                    React.createElement('div', { className: 'stat-label' }, 'Alerts'),
+                    React.createElement('div', { style: { fontWeight: 700, fontSize: 18, color: p.fraudAlerts.length > 0 ? '#FF4D6A' : '#F0F4FA' } }, p.fraudAlerts.length)
+                  )
+                ),
+                React.createElement(BarChart, { data: p.monthlyTotals, height: 120 })
+              ))
+            )
+          )
+        )
+      );
+    }
+
+    function HeatmapPage() {
+      const [data, setData] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/heatmap').then(d => setData(d.sort((a, b) => b.alertCount - a.alertCount))).finally(() => setLoading(false));
+      }, []);
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Geographic Heatmap'),
+          React.createElement('p', null, 'Fraud hotspots by state')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 } },
+            data.map(s => {
+              const intensity = s.alertCount > 6 ? 1 : s.alertCount > 3 ? 0.6 : s.alertCount > 0 ? 0.3 : 0.1;
+              return React.createElement('div', { key: s.code, className: 'heatmap-card', style: { borderLeft: '4px solid ' + (s.alertCount > 6 ? '#FF4D6A' : s.alertCount > 3 ? '#FFB020' : s.alertCount > 0 ? '#4C7CFF' : '#1A2A44') } },
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { fontWeight: 700, fontSize: 18 } }, s.name),
+                    React.createElement('div', { style: { fontSize: 12, color: '#8E9AB5' } }, s.code + ' · ' + s.providerCount + ' providers')
+                  ),
+                  React.createElement('div', { style: { textAlign: 'right' } },
+                    React.createElement('div', { style: { fontWeight: 700, fontSize: 20, color: s.alertCount > 0 ? '#FF4D6A' : '#4F5D78' } }, s.alertCount),
+                    React.createElement('div', { style: { fontSize: 11, color: '#4F5D78' } }, 'alerts')
+                  )
+                ),
+                React.createElement('div', { style: { marginTop: 8, fontSize: 13, color: '#8E9AB5' } }, 'Total Spend: ' + formatCurrency(s.totalSpend)),
+                s.alertCount > 0 && React.createElement('div', { className: 'severity-row' },
+                  s.criticalCount > 0 && React.createElement('div', { className: 'severity-dot' }, React.createElement('span', { style: { width: 8, height: 8, borderRadius: '50%', background: '#FF4D6A', display: 'inline-block' } }), s.criticalCount + ' Critical'),
+                  s.highCount > 0 && React.createElement('div', { className: 'severity-dot' }, React.createElement('span', { style: { width: 8, height: 8, borderRadius: '50%', background: '#FFB020', display: 'inline-block' } }), s.highCount + ' High'),
+                  s.mediumCount > 0 && React.createElement('div', { className: 'severity-dot' }, React.createElement('span', { style: { width: 8, height: 8, borderRadius: '50%', background: '#4C7CFF', display: 'inline-block' } }), s.mediumCount + ' Medium')
+                )
+              );
+            })
+          )
+        )
+      );
+    }
+
+    function SharedFindingsPage({ setPage, setProviderId }) {
+      const [data, setData] = useState({ received: [], sent: [] });
+      const [tab, setTab] = useState('received');
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/shared-findings').then(setData).finally(() => setLoading(false));
+      }, []);
+
+      const markRead = async (id) => {
+        await apiFetch('/api/shared-findings/' + id + '/read', { method: 'PUT' });
+        setData(prev => ({ ...prev, received: prev.received.map(f => f.id === id ? { ...f, isRead: true } : f) }));
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      const items = tab === 'received' ? data.received : data.sent;
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Shared Findings'),
+          React.createElement('p', null, 'Findings shared between team members')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { className: 'tab-row' },
+            React.createElement('button', { className: 'tab-btn' + (tab === 'received' ? ' active' : ''), onClick: () => setTab('received') }, 'Received (' + data.received.length + ')'),
+            React.createElement('button', { className: 'tab-btn' + (tab === 'sent' ? ' active' : ''), onClick: () => setTab('sent') }, 'Sent (' + data.sent.length + ')')
+          ),
+          items.length === 0 ? React.createElement('div', { className: 'empty-state' },
+            React.createElement('div', { className: 'icon' }, '📤'),
+            React.createElement('p', null, tab === 'received' ? 'No findings received yet' : 'No findings sent yet')
+          ) :
+          items.map(f => React.createElement('div', { key: f.id, className: 'card', style: { cursor: 'pointer', opacity: tab === 'received' && !f.isRead ? 1 : 0.8, borderLeft: tab === 'received' && !f.isRead ? '3px solid #00E5CC' : undefined }, onClick: () => { if (tab === 'received' && !f.isRead) markRead(f.id); setProviderId(f.providerId); setPage('provider'); } },
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+              React.createElement('div', null,
+                React.createElement('div', { style: { fontWeight: 600 } }, f.providerName),
+                React.createElement('div', { style: { fontSize: 12, color: '#8E9AB5', marginTop: 4 } },
+                  tab === 'received' ? 'From: ' + f.fromUsername : 'To: ' + f.toUsername,
+                  ' · ' + formatDate(f.createdAt)
+                ),
+                f.message && React.createElement('div', { style: { fontSize: 13, color: '#F0F4FA', marginTop: 8, padding: '8px 12px', background: '#0D1729', borderRadius: 6 } }, f.message)
+              ),
+              tab === 'received' && !f.isRead && React.createElement('span', { className: 'badge tint', style: { background: 'rgba(0,229,204,0.15)', color: '#00E5CC' } }, 'NEW')
+            )
+          ))
+        )
+      );
+    }
+
+    function SettingsPage() {
+      const { user } = useAuth();
+      const [threshold, setThreshold] = useState(200);
+      const [saving, setSaving] = useState(false);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/settings').then(s => { if (s.alertThreshold) setThreshold(s.alertThreshold); }).finally(() => setLoading(false));
+      }, []);
+
+      const save = async () => {
+        setSaving(true);
+        await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ alertThreshold: threshold }) });
+        setSaving(false);
+        alert('Settings saved!');
+      };
+
+      if (loading) return React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }));
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Settings'),
+          React.createElement('p', null, 'Configure your investigation preferences')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { className: 'card' },
+            React.createElement('div', { className: 'card-title', style: { marginBottom: 4 } }, 'Account'),
+            React.createElement('div', { style: { fontSize: 13, color: '#8E9AB5' } }, 'Username: ' + (user?.username || 'N/A'))
+          ),
+          React.createElement('div', { className: 'card' },
+            React.createElement('div', { className: 'card-title', style: { marginBottom: 12 } }, 'Alert Threshold'),
+            React.createElement('p', { style: { fontSize: 13, color: '#8E9AB5', marginBottom: 16 } }, 'Minimum billing growth percentage to trigger a fraud alert. Lower values = more sensitive.'),
+            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 16 } },
+              React.createElement('input', { type: 'range', className: 'range-slider', min: 50, max: 1000, step: 50, value: threshold, onChange: e => setThreshold(parseInt(e.target.value)) }),
+              React.createElement('span', { style: { fontSize: 20, fontWeight: 700, color: '#00E5CC', minWidth: 80 } }, threshold + '%')
+            ),
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#4F5D78', marginTop: 4 } },
+              React.createElement('span', null, '50% (Very Sensitive)'),
+              React.createElement('span', null, '1000% (Low Sensitivity)')
+            ),
+            React.createElement('button', { className: 'btn btn-primary', style: { marginTop: 16 }, onClick: save, disabled: saving }, saving ? 'Saving...' : 'Save Settings')
+          )
+        )
+      );
+    }
+
+    function PlansPage() {
+      const [products, setProducts] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        apiJson('/api/stripe/products').then(d => setProducts(d.data || [])).catch(() => {}).finally(() => setLoading(false));
+      }, []);
+
+      const subscribe = async (priceId) => {
+        const data = await apiJson('/api/stripe/checkout', { method: 'POST', body: JSON.stringify({ priceId }) });
+        if (data.url) window.open(data.url, '_blank');
+      };
+
+      const plans = [
+        { name: 'Free', price: '$0', period: '/mo', features: ['Basic dashboard access', 'View up to 10 providers', 'Standard fraud alerts', 'Community support'], featured: false },
+        { name: 'Analyst', price: '$29', period: '/mo', features: ['Full provider explorer', 'Advanced fraud scanner', 'Watchlist & saved searches', 'CSV export reports', 'Email support'], featured: false },
+        { name: 'Investigator', price: '$79', period: '/mo', features: ['Everything in Analyst', 'AI-powered analysis', 'Team sharing & collaboration', 'Case notes management', 'Geographic heatmaps', 'Priority support'], featured: true },
+      ];
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'page-header' },
+          React.createElement('h2', null, 'Plans & Pricing'),
+          React.createElement('p', null, 'Choose the plan that fits your investigation needs')
+        ),
+        React.createElement('div', { className: 'page-body' },
+          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20, maxWidth: 960 } },
+            plans.map((plan, i) => {
+              const stripeProduct = products.find(p => p.name?.toLowerCase().includes(plan.name.toLowerCase()));
+              const price = stripeProduct?.prices?.[0];
+              return React.createElement('div', { key: i, className: 'plan-card' + (plan.featured ? ' featured' : '') },
+                React.createElement('div', { style: { fontSize: 18, fontWeight: 600, color: '#F0F4FA' } }, plan.name),
+                React.createElement('div', { className: 'plan-price' }, plan.price, React.createElement('span', null, plan.period)),
+                React.createElement('ul', { className: 'plan-features' },
+                  plan.features.map((f, j) => React.createElement('li', { key: j }, f))
+                ),
+                plan.name === 'Free' ? React.createElement('button', { className: 'btn btn-outline', style: { width: '100%', justifyContent: 'center' } }, 'Current Plan') :
+                React.createElement('button', { className: 'btn btn-primary', style: { width: '100%', justifyContent: 'center' }, onClick: () => price && subscribe(price.id), disabled: !price },
+                  price ? 'Subscribe' : 'Coming Soon'
+                )
+              );
+            })
+          )
+        )
+      );
+    }
+
+    function App() {
+      const { user } = useAuth();
+      const [page, setPage] = useState('dashboard');
+      const [providerId, setProviderId] = useState(null);
+
+      if (!user) return React.createElement(AuthScreen, null);
+
+      const renderPage = () => {
+        switch (page) {
+          case 'dashboard': return React.createElement(DashboardPage, { setPage, setProviderId });
+          case 'explorer': return React.createElement(ExplorerPage, { setPage, setProviderId });
+          case 'scanner': return React.createElement(ScannerPage, { setPage, setProviderId });
+          case 'provider': return React.createElement(ProviderDetailPage, { providerId, setPage, setProviderId });
+          case 'assistant': return React.createElement(AssistantPage, null);
+          case 'watchlist': return React.createElement(WatchlistPage, { setPage, setProviderId });
+          case 'saved-searches': return React.createElement(SavedSearchesPage, { setPage, setProviderId });
+          case 'activity': return React.createElement(ActivityPage, null);
+          case 'compare': return React.createElement(ComparePage, { setPage, setProviderId });
+          case 'heatmap': return React.createElement(HeatmapPage, null);
+          case 'shared': return React.createElement(SharedFindingsPage, { setPage, setProviderId });
+          case 'settings': return React.createElement(SettingsPage, null);
+          case 'plans': return React.createElement(PlansPage, null);
+          default: return React.createElement(DashboardPage, { setPage, setProviderId });
+        }
+      };
+
+      return React.createElement('div', { className: 'app-layout' },
+        React.createElement(Sidebar, { page, setPage }),
+        React.createElement('div', { className: 'main-content' }, renderPage())
+      );
+    }
+
+    function Root() {
+      return React.createElement(AuthProvider, null, React.createElement(App, null));
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Root, null));
+  </script>
+</body>
+</html>
