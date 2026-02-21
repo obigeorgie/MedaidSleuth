@@ -190,9 +190,21 @@ function configureExpoAndLanding(app: express.Application) {
     "landing-page.html",
   );
   const landingPageTemplate = fs.readFileSync(templatePath, "utf-8");
+  const webappPath = path.resolve(
+    process.cwd(),
+    "server",
+    "templates",
+    "webapp.html",
+  );
+  const webappTemplate = fs.readFileSync(webappPath, "utf-8");
   const appName = getAppName();
 
   log("Serving static Expo files with dynamic manifest routing");
+
+  app.get("/webapp", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(200).send(webappTemplate);
+  });
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api")) {
