@@ -183,59 +183,47 @@ function serveLandingPage({
 }
 
 function configureExpoAndLanding(app: express.Application) {
-  const templatePath = path.resolve(
-    process.cwd(),
-    "server",
-    "templates",
-    "landing-page.html",
-  );
-  const landingPageTemplate = fs.readFileSync(templatePath, "utf-8");
-  const webappPath = path.resolve(
-    process.cwd(),
-    "server",
-    "templates",
-    "webapp.html",
-  );
-  const webappTemplate = fs.readFileSync(webappPath, "utf-8");
-  const appName = getAppName();
+  const staticBuildDir = path.resolve(process.cwd(), "static-build");
+  const staticIndexPath = path.resolve(staticBuildDir, "index.html");
+  const hasStaticBuild = fs.existsSync(staticIndexPath);
 
-  log("Serving static Expo files with dynamic manifest routing");
-
-  app.get("/webapp", (_req: Request, res: Response) => {
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.status(200).send(webappTemplate);
-  });
+  log(`Static build available: ${hasStaticBuild}`);
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api")) {
       return next();
     }
 
-    if (req.path !== "/" && req.path !== "/manifest") {
-      return next();
-    }
-
-    const platform = req.header("expo-platform");
-    if (platform && (platform === "ios" || platform === "android")) {
-      return serveExpoManifest(platform, res);
-    }
-
-    if (req.path === "/") {
-      return serveLandingPage({
-        req,
-        res,
-        landingPageTemplate,
-        appName,
-      });
+    if (req.path === "/manifest") {
+      const platform = req.header("expo-platform");
+      if (platform && (platform === "ios" || platform === "android")) {
+        return serveExpoManifest(platform, res);
+      }
     }
 
     next();
   });
 
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
-  app.use(express.static(path.resolve(process.cwd(), "static-build")));
+  app.use(express.static(staticBuildDir));
 
-  log("Expo routing: Checking expo-platform header on / and /manifest");
+  log("Expo routing configured");
+
+  return { hasStaticBuild, staticIndexPath };
+}
+
+function setupSpaFallback(app: express.Application, hasStaticBuild: boolean, staticIndexPath: string) {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== "GET" || req.path.startsWith("/api")) {
+      return next();
+    }
+
+    if (hasStaticBuild) {
+      return res.sendFile(staticIndexPath);
+    }
+
+    next();
+  });
 }
 
 function setupErrorHandler(app: express.Application) {
@@ -303,10 +291,11 @@ function setupErrorHandler(app: express.Application) {
   registerChatRoutes(app);
 
   setupRequestLogging(app);
-  configureExpoAndLanding(app);
+  const { hasStaticBuild, staticIndexPath } = configureExpoAndLanding(app);
 
   const server = await registerRoutes(app);
 
+  setupSpaFallback(app, hasStaticBuild, staticIndexPath);
   setupErrorHandler(app);
 
   const port = parseInt(process.env.PORT || "5000", 10);
