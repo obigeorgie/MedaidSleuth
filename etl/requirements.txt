@@ -1,0 +1,4 @@
+google-cloud-bigquery>=3.40.0
+google-cloud-storage>=3.9.0
+requests>=2.32.0
+tenacity>=9.0.0

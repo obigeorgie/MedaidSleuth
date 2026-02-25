@@ -77,7 +77,8 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 
 ### Data Layer
 
-- **Claims data**: The backend uses in-memory mock data generated in `server/routes.ts` to simulate T-MSIS (Transformed Medicaid Statistical Information System) claims data. The mock data includes providers, procedure codes, states, and monthly billing totals.
+- **Claims data**: Currently uses in-memory mock data in `server/routes.ts`. Migrating to BigQuery via the ETL pipeline (see below).
+- **ETL Pipeline**: Python script (`etl/medicaid_etl.py`) downloads the 10.3 GB HHS Medicaid Provider Spending dataset, uploads to GCS (`medicaid-raw-data` bucket), and loads into BigQuery (`medicaid_data.medicaid_provider_spending`). Requires `GCP_SERVICE_ACCOUNT_JSON` and `GCP_PROJECT_ID` env vars.
 - **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) with `users`, `conversations`, `messages`, `watchlist`, `saved_searches`, `case_notes`, `user_settings`, `shared_findings`, and `activity_logs` tables. Sessions are stored in a `session` table (created automatically by connect-pg-simple).
 - **Storage interface**: `IStorage` interface with `DatabaseStorage` implementation using Drizzle ORM for user CRUD operations.
 
@@ -122,3 +123,17 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 - `REPLIT_DOMAINS` — Replit deployment domains for CORS (auto-set by Replit)
 - `AI_INTEGRATIONS_OPENROUTER_BASE_URL` — OpenRouter API base URL (auto-set by Replit AI Integrations)
 - `AI_INTEGRATIONS_OPENROUTER_API_KEY` — OpenRouter API key (auto-set by Replit AI Integrations)
+- `GCP_SERVICE_ACCOUNT_JSON` — Path to Google Cloud service account JSON key (required for ETL pipeline)
+- `GCP_PROJECT_ID` — Google Cloud project ID (required for ETL pipeline)
+- `BQ_DATASET` — BigQuery dataset name (default: medicaid_data)
+- `GCS_BUCKET` — GCS bucket name (default: medicaid-raw-data)
+
+### ETL Pipeline (Python)
+
+| Path | Purpose |
+|------|---------|
+| `etl/medicaid_etl.py` | Main ETL script — download, GCS upload, BigQuery load |
+| `etl/requirements.txt` | Python dependencies for the ETL pipeline |
+| `etl/README.md` | ETL setup and usage documentation |
+
+**Python packages**: google-cloud-bigquery, google-cloud-storage, requests, tenacity

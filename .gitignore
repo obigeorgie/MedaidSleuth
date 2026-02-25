@@ -39,3 +39,16 @@ yarn-error.*
 .vercel
 
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pythonlibs/
+
+# ETL pipeline - large data files
+etl/medicaid_provider_spending.csv
+etl/*.parquet
+
+# GCP credentials
+*-service-account*.json
