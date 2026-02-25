@@ -68,7 +68,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
         if (settings?.alertThreshold) threshold = settings.alertThreshold;
-      } catch (e) {}
+      } catch (settingsErr: any) {
+        console.warn("Failed to load user settings, using default threshold:", settingsErr.message);
+      }
       const thresholdParam = req.query.threshold as string | undefined;
       if (thresholdParam) threshold = parseInt(thresholdParam, 10);
       const limitParam = req.query.limit as string | undefined;
@@ -153,7 +155,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           allAlerts = await scanForFraud(200, 100);
           flaggedIds = new Set(allAlerts.map((f) => f.provider_id));
-        } catch (e) {}
+        } catch (scanErr: any) {
+          console.warn("Failed to fetch fraud alerts for watchlist enrichment:", scanErr.message);
+        }
       }
 
       const enriched = items.map((item) => ({
@@ -384,7 +388,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
         if (settings?.alertThreshold) threshold = settings.alertThreshold;
-      } catch (e) {}
+      } catch (settingsErr: any) {
+        console.warn("Failed to load user settings for CSV export, using default threshold:", settingsErr.message);
+      }
       const results = await scanForFraud(threshold, 500);
       const header = "Provider ID,Provider Name,State,Procedure Code,Procedure Description,Total Paid,Peer Average,Deviation %,Severity,Growth %,Monthly Total";
       const rows = results.map((r) =>

@@ -248,6 +248,11 @@ export default function ProviderDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
     },
+    onError: (error: any) => {
+      const msg = error?.message || "Failed to add to watchlist";
+      if (Platform.OS === "web") alert(msg);
+      else Alert.alert("Error", msg);
+    },
   });
 
   const removeWatchlistMutation = useMutation({
@@ -258,6 +263,11 @@ export default function ProviderDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/watchlist/check", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
+    },
+    onError: (error: any) => {
+      const msg = error?.message || "Failed to remove from watchlist";
+      if (Platform.OS === "web") alert(msg);
+      else Alert.alert("Error", msg);
     },
   });
 
@@ -358,6 +368,11 @@ export default function ProviderDetailScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/case-notes", id] });
     },
+    onError: (error: any) => {
+      const msg = error?.message || "Failed to create note";
+      if (Platform.OS === "web") alert(msg);
+      else Alert.alert("Error", msg);
+    },
   });
 
   const deleteNoteMutation = useMutation({
@@ -366,6 +381,11 @@ export default function ProviderDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/case-notes", id] });
+    },
+    onError: (error: any) => {
+      const msg = error?.message || "Failed to delete note";
+      if (Platform.OS === "web") alert(msg);
+      else Alert.alert("Error", msg);
     },
   });
 

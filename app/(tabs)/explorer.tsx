@@ -9,6 +9,8 @@ import {
   Platform,
   FlatList,
   Alert,
+  Modal,
+  TextInput,
 } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -197,6 +199,8 @@ export default function ExplorerScreen() {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState("");
   const queryClient = useQueryClient();
 
   const statesQuery = useQuery<StateOption[]>({ queryKey: ["/api/states"] });
@@ -216,6 +220,14 @@ export default function ExplorerScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/saved-searches"] });
+    },
+    onError: (error: any) => {
+      const msg = error?.message || "Failed to save search";
+      if (Platform.OS === "web") {
+        alert(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
     },
   });
 
@@ -256,32 +268,15 @@ export default function ExplorerScreen() {
         : null;
 
       if (Platform.OS === "web" && promptName !== null) {
-        if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
         saveSearchMutation.mutate({
           name: promptName,
           stateCode: selectedState,
           procedureCode: selectedCode,
         });
       } else if (Platform.OS !== "web") {
-        Alert.prompt(
-          "Save Search",
-          "Enter a name for this search",
-          (text) => {
-            if (text.trim()) {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              saveSearchMutation.mutate({
-                name: text.trim(),
-                stateCode: selectedState,
-                procedureCode: selectedCode,
-              });
-            }
-          },
-          "plain-text",
-          "",
-          "default"
-        );
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setSaveSearchName("");
+        setSaveModalVisible(true);
       }
     };
     showPrompt();
@@ -399,9 +394,124 @@ export default function ExplorerScreen() {
           </View>
         }
       />
+
+      <Modal
+        visible={saveModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSaveModalVisible(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={modalStyles.card}>
+            <Text style={modalStyles.title}>Save Search</Text>
+            <Text style={modalStyles.subtitle}>Enter a name for this search</Text>
+            <TextInput
+              style={modalStyles.input}
+              placeholder="Search name"
+              placeholderTextColor={C.textMuted}
+              value={saveSearchName}
+              onChangeText={setSaveSearchName}
+              autoFocus
+            />
+            <View style={modalStyles.btnRow}>
+              <Pressable
+                style={modalStyles.cancelBtn}
+                onPress={() => setSaveModalVisible(false)}
+              >
+                <Text style={modalStyles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[modalStyles.saveBtn, !saveSearchName.trim() && { opacity: 0.5 }]}
+                onPress={() => {
+                  if (saveSearchName.trim()) {
+                    saveSearchMutation.mutate({
+                      name: saveSearchName.trim(),
+                      stateCode: selectedState,
+                      procedureCode: selectedCode,
+                    });
+                    setSaveModalVisible(false);
+                  }
+                }}
+                disabled={!saveSearchName.trim()}
+              >
+                <Text style={modalStyles.saveText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  card: {
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 360,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  title: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 18,
+    color: C.text,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
+    marginBottom: 16,
+  },
+  input: {
+    backgroundColor: C.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: "DMSans_400Regular",
+    fontSize: 15,
+    color: C.text,
+    marginBottom: 20,
+  },
+  btnRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  cancelText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 14,
+    color: C.textMuted,
+  },
+  saveBtn: {
+    backgroundColor: C.tint,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  saveText: {
+    fontFamily: "DMSans_600SemiBold",
+    fontSize: 14,
+    color: C.textInverse,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
