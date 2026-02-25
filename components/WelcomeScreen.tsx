@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     width: 280,
-    height: 64,
+    height: 100,
     marginBottom: 12,
   },
   heroTagline: {

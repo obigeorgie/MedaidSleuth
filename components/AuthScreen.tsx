@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     width: 260,
-    height: 60,
+    height: 90,
     marginBottom: 8,
   },
   tagline: {

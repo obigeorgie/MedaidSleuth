@@ -422,8 +422,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerLogo: {
-    width: 160,
-    height: 28,
+    width: 120,
+    height: 44,
     marginBottom: 4,
   },
   title: {
