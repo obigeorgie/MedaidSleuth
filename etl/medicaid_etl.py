@@ -47,31 +47,51 @@ logging.basicConfig(
 )
 logger = logging.getLogger("medicaid_etl")
 
-HHS_BASE_URL = "https://data.medicaid.gov/api/1/datastore/query/4e6c-r223/0"
-HHS_DOWNLOAD_URL = "https://data.medicaid.gov/api/1/datastore/query/4e6c-r223/0/download"
+CMS_DOWNLOAD_URLS = {
+    "2023": "https://data.cms.gov/sites/default/files/2025-04/e3f823f8-db5b-4cc7-ba04-e7ae92b99757/MUP_PHY_R25_P05_V20_D23_Prov_Svc.csv",
+    "2022": "https://data.cms.gov/sites/default/files/2025-11/53fb2bae-4913-48dc-a6d4-d8c025906567/MUP_PHY_R25_P05_V20_D22_Prov_Svc.csv",
+    "2021": "https://data.cms.gov/sites/default/files/2025-11/bffaf97a-c2ab-4fd7-8718-be90742e3485/MUP_PHY_R25_P05_V20_D21_Prov_Svc.csv",
+    "2020": "https://data.cms.gov/sites/default/files/2025-11/d22b18cd-7726-4bf5-8e9c-3e4587c589a1/MUP_PHY_R25_P05_V20_D20_Prov_Svc.csv",
+    "2019": "https://data.cms.gov/sites/default/files/2025-11/7befba27-752e-47a8-a76c-6c6d4f74f2e3/MUP_PHY_R25_P04_V20_D19_Prov_Svc.csv",
+    "2018": "https://data.cms.gov/sites/default/files/2025-11/5669eafb-f0b3-4dc5-be6d-abc09b480c2e/MUP_PHY_R25_P04_V20_D18_Prov_Svc.csv",
+    "2017": "https://data.cms.gov/sites/default/files/2025-11/4623fb40-781e-4eef-860e-b851cd5d10ea/MUP_PHY_R25_P04_V20_D17_Prov_Svc.csv",
+    "2016": "https://data.cms.gov/sites/default/files/2025-11/426bf97a-4cb8-47ca-9727-a535d9e8c298/MUP_PHY_R25_P04_V20_D16_Prov_Svc.csv",
+    "2015": "https://data.cms.gov/sites/default/files/2025-11/14954ce3-4c43-43df-97e9-2c0437d7b43c/MUP_PHY_R25_P04_V20_D15_Prov_Svc.csv",
+    "2014": "https://data.cms.gov/sites/default/files/2025-11/6700f86d-d2e5-4f2d-9dcb-8c30412768ff/MUP_PHY_R25_P04_V20_D14_Prov_Svc.csv",
+    "2013": "https://data.cms.gov/sites/default/files/2025-11/bf4231f9-ec7f-4189-afc3-ba5d53b8bd12/MUP_PHY_R25_P04_V20_D13_Prov_Svc.csv",
+}
+DEFAULT_DOWNLOAD_URL = CMS_DOWNLOAD_URLS["2023"]
 
 EXPECTED_COLUMNS = [
-    "npi",
-    "prvdr_last_name_org",
-    "prvdr_first_name",
-    "prvdr_state_abrvtn",
+    "rndrng_npi",
+    "rndrng_prvdr_last_org_name",
+    "rndrng_prvdr_first_name",
+    "rndrng_prvdr_state_abrvtn",
+    "rndrng_prvdr_type",
     "hcpcs_cd",
+    "hcpcs_desc",
     "tot_srvcs",
     "tot_benes",
-    "avg_mdcd_pymt_amt",
-    "year",
+    "avg_mdcr_pymt_amt",
 ]
 
 COLUMN_ALIASES = {
-    "npi": "provider_id",
+    "rndrng_npi": "provider_id",
     "hcpcs_cd": "procedure_code",
-    "prvdr_state_abrvtn": "state_code",
-    "avg_mdcd_pymt_amt": "total_paid",
-    "year": "year",
-    "prvdr_last_name_org": "provider_name",
-    "prvdr_first_name": "provider_first_name",
+    "rndrng_prvdr_state_abrvtn": "state_code",
+    "avg_mdcr_pymt_amt": "total_paid",
+    "rndrng_prvdr_last_org_name": "provider_name",
+    "rndrng_prvdr_first_name": "provider_first_name",
+    "rndrng_prvdr_type": "provider_type",
+    "hcpcs_desc": "procedure_description",
     "tot_srvcs": "total_services",
     "tot_benes": "total_beneficiaries",
+    "avg_sbmtd_chrg": "avg_submitted_charge",
+    "avg_mdcr_alowd_amt": "avg_allowed_amount",
+    "avg_mdcr_stdzd_amt": "avg_standardized_amount",
+    "place_of_srvc": "place_of_service",
+    "rndrng_prvdr_city": "provider_city",
+    "rndrng_prvdr_zip5": "provider_zip",
 }
 
 
@@ -83,7 +103,7 @@ class ETLConfig:
         self.dataset_id = os.environ.get("BQ_DATASET", "medicaid_data")
         self.table_id = os.environ.get("BQ_TABLE", "medicaid_provider_spending")
         self.bucket_name = os.environ.get("GCS_BUCKET", "medicaid-raw-data")
-        self.hhs_url = os.environ.get("HHS_DATASET_URL", HHS_DOWNLOAD_URL)
+        self.hhs_url = os.environ.get("HHS_DATASET_URL", DEFAULT_DOWNLOAD_URL)
         self.skip_download = os.environ.get("SKIP_DOWNLOAD", "").lower() == "true"
         self.skip_gcs_upload = os.environ.get("SKIP_GCS_UPLOAD", "").lower() == "true"
         self.local_file = os.environ.get(
@@ -408,15 +428,22 @@ def create_mapped_view(config: ETLConfig):
     view_id = f"{config.project_id}.{config.dataset_id}.medicaid_claims_view"
     view_sql = f"""
     SELECT
-        npi AS provider_id,
-        prvdr_last_name_org AS provider_name,
-        prvdr_first_name AS provider_first_name,
-        prvdr_state_abrvtn AS state_code,
-        hcpcs_cd AS procedure_code,
-        SAFE_CAST(tot_srvcs AS INT64) AS total_services,
-        SAFE_CAST(tot_benes AS INT64) AS total_beneficiaries,
-        SAFE_CAST(avg_mdcd_pymt_amt AS FLOAT64) AS total_paid,
-        SAFE_CAST(year AS INT64) AS year
+        Rndrng_NPI AS provider_id,
+        Rndrng_Prvdr_Last_Org_Name AS provider_name,
+        Rndrng_Prvdr_First_Name AS provider_first_name,
+        Rndrng_Prvdr_State_Abrvtn AS state_code,
+        Rndrng_Prvdr_City AS provider_city,
+        Rndrng_Prvdr_Zip5 AS provider_zip,
+        Rndrng_Prvdr_Type AS provider_type,
+        HCPCS_Cd AS procedure_code,
+        HCPCS_Desc AS procedure_description,
+        Place_Of_Srvc AS place_of_service,
+        SAFE_CAST(Tot_Benes AS INT64) AS total_beneficiaries,
+        SAFE_CAST(Tot_Srvcs AS INT64) AS total_services,
+        SAFE_CAST(Avg_Sbmtd_Chrg AS FLOAT64) AS avg_submitted_charge,
+        SAFE_CAST(Avg_Mdcr_Alowd_Amt AS FLOAT64) AS avg_allowed_amount,
+        SAFE_CAST(Avg_Mdcr_Pymt_Amt AS FLOAT64) AS total_paid,
+        SAFE_CAST(Avg_Mdcr_Stdzd_Amt AS FLOAT64) AS avg_standardized_amount
     FROM `{config.full_table_id}`
     """
 
@@ -444,11 +471,11 @@ def verify_data(config: ETLConfig):
         ),
         (
             "Distinct states",
-            f"SELECT COUNT(DISTINCT prvdr_state_abrvtn) as states FROM `{config.full_table_id}`",
+            f"SELECT COUNT(DISTINCT Rndrng_Prvdr_State_Abrvtn) as states FROM `{config.full_table_id}`",
         ),
         (
             "Distinct providers (NPI)",
-            f"SELECT COUNT(DISTINCT npi) as providers FROM `{config.full_table_id}`",
+            f"SELECT COUNT(DISTINCT Rndrng_NPI) as providers FROM `{config.full_table_id}`",
         ),
     ]
 
