@@ -20,10 +20,12 @@ Environment Variables:
     LOCAL_FILE_PATH           - Override local file path (default: etl/medicaid_provider_spending.csv)
 """
 
+import atexit
 import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -75,7 +77,8 @@ COLUMN_ALIASES = {
 
 class ETLConfig:
     def __init__(self):
-        self.service_account_path = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+        self._raw_credentials = os.environ.get("GCP_SERVICE_ACCOUNT_JSON", "")
+        self._credentials_file = None
         self.project_id = os.environ.get("GCP_PROJECT_ID")
         self.dataset_id = os.environ.get("BQ_DATASET", "medicaid_data")
         self.table_id = os.environ.get("BQ_TABLE", "medicaid_provider_spending")
@@ -91,12 +94,8 @@ class ETLConfig:
 
     def validate(self):
         errors = []
-        if not self.service_account_path:
-            errors.append("GCP_SERVICE_ACCOUNT_JSON is required")
-        elif not Path(self.service_account_path).exists():
-            errors.append(
-                f"Service account file not found: {self.service_account_path}"
-            )
+        if not self._raw_credentials:
+            errors.append("GCP_SERVICE_ACCOUNT_JSON is required (JSON content or file path)")
         if not self.project_id:
             errors.append("GCP_PROJECT_ID is required")
         if errors:
@@ -104,9 +103,34 @@ class ETLConfig:
                 logger.error(err)
             raise SystemExit(1)
 
+        self._resolve_credentials()
+
+    def _resolve_credentials(self):
+        value = self._raw_credentials.strip()
+        if value.startswith("{"):
+            try:
+                json.loads(value)
+            except json.JSONDecodeError as e:
+                logger.error(f"GCP_SERVICE_ACCOUNT_JSON contains invalid JSON: {e}")
+                raise SystemExit(1)
+            tmp = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False, prefix="gcp_sa_"
+            )
+            tmp.write(value)
+            tmp.close()
+            self._credentials_file = tmp.name
+            atexit.register(lambda: os.unlink(tmp.name) if os.path.exists(tmp.name) else None)
+            logger.info("Loaded service account credentials from environment variable")
+        else:
+            if not Path(value).exists():
+                logger.error(f"Service account file not found: {value}")
+                raise SystemExit(1)
+            self._credentials_file = value
+            logger.info(f"Using service account credentials from file: {value}")
+
     def get_credentials(self):
         return service_account.Credentials.from_service_account_file(
-            self.service_account_path,
+            self._credentials_file,
             scopes=[
                 "https://www.googleapis.com/auth/cloud-platform",
                 "https://www.googleapis.com/auth/bigquery",
