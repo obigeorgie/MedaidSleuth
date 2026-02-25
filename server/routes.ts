@@ -374,6 +374,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/export/csv", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!isBigQueryConfigured()) {
+        return res.status(503).json({ message: "BigQuery not configured" });
+      }
+      const userId = req.session.userId!;
+      let threshold = 200;
+      try {
+        const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+        if (settings?.alertThreshold) threshold = settings.alertThreshold;
+      } catch (e) {}
+      const results = await scanForFraud(threshold, 500);
+      const header = "Provider ID,Provider Name,State,Procedure Code,Procedure Description,Total Paid,Peer Average,Deviation %,Severity,Growth %,Monthly Total";
+      const rows = results.map((r) =>
+        [
+          r.provider_id,
+          `"${(r.provider_name || "").replace(/"/g, '""')}"`,
+          r.state_code,
+          r.procedure_code,
+          `"${(r.procedure_desc || "").replace(/"/g, '""')}"`,
+          r.total_paid,
+          r.peer_avg,
+          r.deviation_percent,
+          r.severity,
+          r.growth_percent,
+          r.monthly_total,
+        ].join(",")
+      );
+      const csv = [header, ...rows].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=fraud-report.csv");
+      res.send(csv);
+    } catch (error: any) {
+      console.error("Error exporting CSV:", error.message);
+      res.status(500).json({ message: "Failed to export CSV" });
+    }
+  });
+
+  app.get("/api/heatmap", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      if (!isBigQueryConfigured()) {
+        return res.status(503).json({ message: "BigQuery not configured" });
+      }
+      const [alerts, states] = await Promise.all([
+        scanForFraud(200, 500),
+        getStates(),
+      ]);
+
+      const stateAlertMap: Record<string, { criticalCount: number; highCount: number; mediumCount: number; totalSpend: number }> = {};
+      for (const alert of alerts) {
+        if (!stateAlertMap[alert.state_code]) {
+          stateAlertMap[alert.state_code] = { criticalCount: 0, highCount: 0, mediumCount: 0, totalSpend: 0 };
+        }
+        const entry = stateAlertMap[alert.state_code];
+        if (alert.severity === "critical") entry.criticalCount++;
+        else if (alert.severity === "high") entry.highCount++;
+        else entry.mediumCount++;
+        entry.totalSpend += alert.total_paid;
+      }
+
+      const STATE_NAMES: Record<string, string> = {
+        AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+        CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+        HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+        KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+        MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+        MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+        NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+        OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+        SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+        VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+        DC: "District of Columbia", PR: "Puerto Rico", VI: "Virgin Islands", GU: "Guam",
+        AS: "American Samoa", MP: "Northern Mariana Islands",
+      };
+
+      const heatmapData = states.map((s) => {
+        const alertData = stateAlertMap[s.code] || { criticalCount: 0, highCount: 0, mediumCount: 0, totalSpend: 0 };
+        return {
+          code: s.code,
+          name: STATE_NAMES[s.code] || s.code,
+          totalSpend: alertData.totalSpend,
+          alertCount: alertData.criticalCount + alertData.highCount + alertData.mediumCount,
+          providerCount: s.claimCount,
+          criticalCount: alertData.criticalCount,
+          highCount: alertData.highCount,
+          mediumCount: alertData.mediumCount,
+        };
+      });
+
+      res.json(heatmapData);
+    } catch (error: any) {
+      console.error("Error fetching heatmap:", error.message);
+      res.status(500).json({ message: "Failed to fetch heatmap data" });
+    }
+  });
+
+  app.get("/api/compare", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!isBigQueryConfigured()) {
+        return res.status(503).json({ message: "BigQuery not configured" });
+      }
+      const idsParam = req.query.ids as string;
+      if (!idsParam) return res.status(400).json({ message: "ids parameter required" });
+      const ids = idsParam.split(",").filter(Boolean).slice(0, 4);
+      if (ids.length < 2) return res.status(400).json({ message: "At least 2 provider IDs required" });
+
+      const results = await Promise.all(ids.map((id) => getProviderDetail(id)));
+      const compareData = results
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          state_code: p.state_code,
+          state_name: p.state_name,
+          procedure_code: p.procedure_code,
+          procedure_desc: p.procedure_desc,
+          totalSpend: p.totalSpend,
+          claimCount: p.claimCount,
+          monthlyTotals: p.monthlyTotals,
+          fraudAlerts: p.fraudAlerts,
+          isFlagged: p.isFlagged,
+        }));
+
+      res.json(compareData);
+    } catch (error: any) {
+      console.error("Error comparing providers:", error.message);
+      res.status(500).json({ message: "Failed to compare providers" });
+    }
+  });
+
   app.get("/api/stripe/config", async (_req: Request, res: Response) => {
     try {
       const publishableKey = getStripePublishableKey();
