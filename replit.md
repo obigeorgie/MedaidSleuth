@@ -97,7 +97,7 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 ### Build & Run
 
 - **Development**: Two processes run simultaneously — `expo:dev` for the frontend bundler and `server:dev` for the Express API
-- **Production**: Frontend is built with `expo:static:build`, backend with `server:build`, then served with `server:prod`
+- **Production**: Frontend is built with `expo:static:build` (generates web export via `expo export --platform web` into `static-build/` plus mobile bundles for Expo Go), backend with `server:build`, then served with `server:prod`. The Express server serves the web `index.html` as an SPA fallback for all non-API routes.
 - **Database migrations**: `npm run db:push` uses drizzle-kit to push schema to PostgreSQL
 
 ## External Dependencies

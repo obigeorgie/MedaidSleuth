@@ -59,20 +59,16 @@ function getDeploymentDomain() {
 }
 
 function prepareDirectories(timestamp) {
-  console.log("Preparing build directories...");
+  console.log("Preparing mobile build directories...");
 
-  if (fs.existsSync("static-build")) {
-    fs.rmSync("static-build", { recursive: true });
-  }
-
-  const dirs = [
+  const mobileDirs = [
     path.join("static-build", timestamp, "_expo", "static", "js", "ios"),
     path.join("static-build", timestamp, "_expo", "static", "js", "android"),
     path.join("static-build", "ios"),
     path.join("static-build", "android"),
   ];
 
-  for (const dir of dirs) {
+  for (const dir of mobileDirs) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
@@ -496,6 +492,66 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
   console.log("Manifests updated");
 }
 
+async function buildWebExport(domain) {
+  console.log("Building Expo web export...");
+
+  if (fs.existsSync("static-build")) {
+    fs.rmSync("static-build", { recursive: true });
+  }
+
+  return new Promise((resolve, reject) => {
+    const env = {
+      ...process.env,
+      EXPO_PUBLIC_DOMAIN: domain,
+    };
+
+    const exportProcess = spawn(
+      "npx",
+      ["expo", "export", "--platform", "web", "--output-dir", "static-build", "--clear"],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+        env,
+      }
+    );
+
+    let stderr = "";
+
+    if (exportProcess.stdout) {
+      exportProcess.stdout.on("data", (data) => {
+        const output = data.toString().trim();
+        if (output) console.log(`[Web Export] ${output}`);
+      });
+    }
+    if (exportProcess.stderr) {
+      exportProcess.stderr.on("data", (data) => {
+        const output = data.toString().trim();
+        if (output) {
+          console.error(`[Web Export] ${output}`);
+          stderr += output + "\n";
+        }
+      });
+    }
+
+    exportProcess.on("close", (code) => {
+      if (code === 0) {
+        const indexPath = path.join("static-build", "index.html");
+        if (fs.existsSync(indexPath)) {
+          console.log("Web export completed successfully");
+          resolve();
+        } else {
+          reject(new Error("Web export finished but index.html was not generated"));
+        }
+      } else {
+        reject(new Error(`Web export failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    exportProcess.on("error", (err) => {
+      reject(new Error(`Failed to start web export: ${err.message}`));
+    });
+  });
+}
+
 async function main() {
   console.log("Building static Expo Go deployment...");
 
@@ -504,6 +560,8 @@ async function main() {
   const domain = getDeploymentDomain();
   const baseUrl = `https://${domain}`;
   const timestamp = `${Date.now()}-${process.pid}`;
+
+  await buildWebExport(domain);
 
   prepareDirectories(timestamp);
   clearMetroCache();
