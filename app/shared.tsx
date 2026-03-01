@@ -250,7 +250,7 @@ export default function SharedScreen() {
         scrollEnabled={!!findings && findings.length > 0}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="inbox-outline" size={44} color={C.textMuted} />
+            <Ionicons name="albums-outline" size={44} color={C.textMuted} />
             <Text style={styles.emptyTitle}>
               {activeTab === "received"
                 ? "No Findings Received"

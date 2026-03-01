@@ -34,7 +34,7 @@ export function registerChatRoutes(app: Express): void {
 
   app.get("/api/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const userId = req.session.userId;
       const conversation = await chatStorage.getConversation(id, userId);
       if (!conversation) {
@@ -62,7 +62,7 @@ export function registerChatRoutes(app: Express): void {
 
   app.delete("/api/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const userId = req.session.userId;
       await chatStorage.deleteConversation(id, userId);
       res.status(204).send();
@@ -74,7 +74,7 @@ export function registerChatRoutes(app: Express): void {
 
   app.post("/api/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
     try {
-      const conversationId = parseInt(req.params.id);
+      const conversationId = parseInt(req.params.id as string);
       const { content } = req.body;
 
       await chatStorage.createMessage(conversationId, "user", content);

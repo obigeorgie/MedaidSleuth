@@ -106,7 +106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isBigQueryConfigured()) {
         return res.status(503).json({ message: "BigQuery not configured" });
       }
-      const providerId = req.params.id;
+      const providerId = req.params.id as string;
       const detail = await getProviderDetail(providerId);
       if (!detail) {
         return res.status(404).json({ message: "Provider not found" });
@@ -189,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/watchlist/:providerId", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const providerId = req.params.providerId;
+      const providerId = req.params.providerId as string;
       await db.delete(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.providerId, providerId)));
       await db.insert(activityLogs).values({ userId, action: "removed_from_watchlist", entityType: "provider", entityId: providerId });
       res.json({ message: "Removed from watchlist" });
@@ -201,7 +201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/watchlist/check/:providerId", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const providerId = req.params.providerId;
+      const providerId = req.params.providerId as string;
       const existing = await db.select().from(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.providerId, providerId)));
       res.json({ isWatched: existing.length > 0 });
     } catch (error: any) {
@@ -235,7 +235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/saved-searches/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       await db.delete(savedSearches).where(and(eq(savedSearches.id, id), eq(savedSearches.userId, userId)));
       res.json({ message: "Deleted" });
     } catch (error: any) {
@@ -282,7 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/case-notes/:providerId", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const providerId = req.params.providerId;
+      const providerId = req.params.providerId as string;
       const notes = await db.select().from(caseNotes).where(and(eq(caseNotes.userId, userId), eq(caseNotes.providerId, providerId))).orderBy(desc(caseNotes.createdAt));
       res.json(notes);
     } catch (error: any) {
@@ -306,7 +306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/case-notes/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       await db.delete(caseNotes).where(and(eq(caseNotes.id, id), eq(caseNotes.userId, userId)));
       res.json({ message: "Deleted" });
     } catch (error: any) {
@@ -349,7 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/shared-findings/:id/read", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       await db.update(sharedFindings).set({ isRead: true }).where(and(eq(sharedFindings.id, id), eq(sharedFindings.toUserId, userId)));
       res.json({ message: "Marked as read" });
     } catch (error: any) {
@@ -360,7 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/shared-findings/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       await db.delete(sharedFindings).where(and(eq(sharedFindings.id, id), or(eq(sharedFindings.fromUserId, userId), eq(sharedFindings.toUserId, userId))));
       res.json({ message: "Deleted" });
     } catch (error: any) {
@@ -512,7 +512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/stripe/config", async (_req: Request, res: Response) => {
     try {
-      const publishableKey = getStripePublishableKey();
+      const publishableKey = await getStripePublishableKey();
       if (publishableKey) {
         res.json({ publishableKey });
       } else {
@@ -525,7 +525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/stripe/create-checkout", requireAuth, async (req: Request, res: Response) => {
     try {
-      const stripe = getUncachableStripeClient();
+      const stripe = await getUncachableStripeClient();
       if (!stripe) return res.status(503).json({ error: "Stripe not configured" });
 
       const { priceId, plan } = req.body;
