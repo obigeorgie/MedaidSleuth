@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { pool } from "./db";
 import { insertUserSchema } from "@shared/schema";
@@ -24,7 +25,10 @@ export function setupAuth(app: Express) {
   app.use(
     session({
       store: sessionStore,
-      secret: process.env.SESSION_SECRET || "medicaid-sleuth-secret-key-change-in-prod",
+      secret: process.env.SESSION_SECRET || (() => {
+        console.warn("SESSION_SECRET not set — generating a random secret. Sessions will not persist across restarts.");
+        return crypto.randomBytes(32).toString("hex");
+      })(),
       resave: false,
       saveUninitialized: false,
       cookie: {

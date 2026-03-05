@@ -47,8 +47,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const state = req.query.state as string | undefined;
       const code = req.query.code as string | undefined;
       const provider = req.query.provider as string | undefined;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 500;
-      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+      const parsedLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : NaN;
+      const parsedOffset = req.query.offset ? parseInt(req.query.offset as string, 10) : NaN;
+      const limit = isNaN(parsedLimit) ? 500 : parsedLimit;
+      const offset = isNaN(parsedOffset) ? 0 : parsedOffset;
 
       const claims = await getClaims({ state, code, provider, limit, offset });
       res.json(claims);
@@ -72,9 +74,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn("Failed to load user settings, using default threshold:", settingsErr.message);
       }
       const thresholdParam = req.query.threshold as string | undefined;
-      if (thresholdParam) threshold = parseInt(thresholdParam, 10);
+      if (thresholdParam) {
+        const parsed = parseInt(thresholdParam, 10);
+        if (!isNaN(parsed)) threshold = parsed;
+      }
       const limitParam = req.query.limit as string | undefined;
-      const limit = limitParam ? parseInt(limitParam, 10) : 100;
+      const parsedScanLimit = limitParam ? parseInt(limitParam, 10) : NaN;
+      const limit = isNaN(parsedScanLimit) ? 100 : parsedScanLimit;
       const results = await scanForFraud(threshold, limit);
       res.json(results);
     } catch (error: any) {
@@ -90,8 +96,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const state = req.query.state as string | undefined;
       const code = req.query.code as string | undefined;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 200;
-      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+      const parsedProvLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : NaN;
+      const parsedProvOffset = req.query.offset ? parseInt(req.query.offset as string, 10) : NaN;
+      const limit = isNaN(parsedProvLimit) ? 200 : parsedProvLimit;
+      const offset = isNaN(parsedProvOffset) ? 0 : parsedProvOffset;
 
       const providers = await getProviders({ state, code, limit, offset });
       res.json(providers);
@@ -236,6 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId!;
       const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       await db.delete(savedSearches).where(and(eq(savedSearches.id, id), eq(savedSearches.userId, userId)));
       res.json({ message: "Deleted" });
     } catch (error: any) {
@@ -307,6 +316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId!;
       const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       await db.delete(caseNotes).where(and(eq(caseNotes.id, id), eq(caseNotes.userId, userId)));
       res.json({ message: "Deleted" });
     } catch (error: any) {
@@ -350,6 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId!;
       const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       await db.update(sharedFindings).set({ isRead: true }).where(and(eq(sharedFindings.id, id), eq(sharedFindings.toUserId, userId)));
       res.json({ message: "Marked as read" });
     } catch (error: any) {
@@ -361,6 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId!;
       const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       await db.delete(sharedFindings).where(and(eq(sharedFindings.id, id), or(eq(sharedFindings.fromUserId, userId), eq(sharedFindings.toUserId, userId))));
       res.json({ message: "Deleted" });
     } catch (error: any) {

@@ -1,10 +1,6 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
 
 let bqClient: BigQuery | null = null;
-let tempKeyFile: string | null = null;
 
 function getProjectId(): string {
   const projectId = process.env.GCP_PROJECT_ID;
@@ -31,11 +27,10 @@ export function getBigQueryClient(): BigQuery {
   if (!raw) throw new Error("GCP_SERVICE_ACCOUNT_JSON environment variable is required");
 
   if (raw.trim().startsWith("{")) {
-    tempKeyFile = path.join(os.tmpdir(), `gcp_sa_${Date.now()}.json`);
-    fs.writeFileSync(tempKeyFile, raw);
+    const credentials = JSON.parse(raw);
     bqClient = new BigQuery({
       projectId: getProjectId(),
-      keyFilename: tempKeyFile,
+      credentials,
     });
   } else {
     bqClient = new BigQuery({
@@ -180,6 +175,8 @@ export async function getClaims(filters: {
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const limit = filters.limit || 500;
   const offset = filters.offset || 0;
+  params.queryLimit = limit;
+  params.queryOffset = offset;
 
   return query(`
     SELECT
@@ -196,14 +193,14 @@ export async function getClaims(filters: {
     FROM \`${viewId}\`
     ${where}
     ORDER BY total_paid DESC
-    LIMIT ${limit} OFFSET ${offset}
+    LIMIT @queryLimit OFFSET @queryOffset
   `, params);
 }
 
 export async function getProviders(filters?: { state?: string; code?: string; limit?: number; offset?: number }) {
   const viewId = getViewId();
   const conditions: string[] = [];
-  const params: Record<string, string> = {};
+  const params: Record<string, string | number> = {};
 
   if (filters?.state) {
     conditions.push("state_code = @state");
@@ -217,6 +214,8 @@ export async function getProviders(filters?: { state?: string; code?: string; li
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const limit = filters?.limit || 200;
   const offset = filters?.offset || 0;
+  params.queryLimit = limit;
+  params.queryOffset = offset;
 
   const rows = await query<{
     provider_id: string;
@@ -254,7 +253,7 @@ export async function getProviders(filters?: { state?: string; code?: string; li
     FROM provider_stats
     WHERE rn = 1
     ORDER BY total_spend DESC
-    LIMIT ${limit} OFFSET ${offset}
+    LIMIT @queryLimit OFFSET @queryOffset
   `, params);
 
   return rows.map((r) => ({
@@ -376,11 +375,11 @@ export async function getProviderDetail(providerId: string): Promise<ProviderDet
     fraudAlerts,
     isFlagged: fraudAlerts.length > 0,
     monthlyTotals: topProcs.map((p, i) => ({
-      month: `2023-${String(i + 1).padStart(2, "0")}-01`,
+      month: `Procedure ${i + 1}`,
       total: Number(p.total_paid),
     })),
     growthData: topProcs.slice(1).map((p, i) => ({
-      month: `2023-${String(i + 2).padStart(2, "0")}-01`,
+      month: `Procedure ${i + 2}`,
       growth: topProcs[i].total_paid > 0
         ? Math.round(((Number(p.total_paid) - Number(topProcs[i].total_paid)) / Number(topProcs[i].total_paid)) * 100 * 100) / 100
         : 0,

@@ -84,6 +84,16 @@ The project uses a monorepo structure with a React Native (Expo) frontend and an
 - **Database schema**: Drizzle ORM with PostgreSQL is configured (`shared/schema.ts`, `drizzle.config.ts`) with `users`, `conversations`, `messages`, `watchlist`, `saved_searches`, `case_notes`, `user_settings`, `shared_findings`, and `activity_logs` tables. Sessions are stored in a `session` table (created automatically by connect-pg-simple).
 - **Storage interface**: `IStorage` interface with `DatabaseStorage` implementation using Drizzle ORM for user CRUD operations.
 
+### Bug Fixes Applied
+
+- **Metro crash fix**: Added `blockList` in `metro.config.js` to exclude `.local/skills/.tmp*` directories from Metro's file watcher, preventing crashes from stale temp paths
+- **SQL injection fix**: Parameterized `LIMIT`/`OFFSET` values in BigQuery queries (`getClaims`, `getProviders`) using `@queryLimit`/`@queryOffset` instead of string interpolation
+- **NaN guards**: Added `isNaN()` checks on all `parseInt` calls in route handlers to prevent invalid query/path parameters from causing errors
+- **GCP credential security**: BigQuery client now uses `credentials` object directly from parsed JSON instead of writing a temp file to disk
+- **Session secret**: Generates a random session secret at startup if `SESSION_SECRET` env var is not set, with a console warning
+- **Stripe price safety**: Products with no prices are filtered out in the Plans screen
+- **Provider detail data labels**: Monthly/growth chart data labels changed from fake dates to "Procedure N" to honestly represent that data is per-procedure, not temporal
+
 ### Key Design Patterns
 
 - **File-based routing**: expo-router maps the `app/` directory to navigation routes

@@ -215,7 +215,7 @@ export default function PlansScreen() {
     checkoutMutation.mutate(priceId);
   };
 
-  const products = productsQuery.data?.data || [];
+  const products = (productsQuery.data?.data || []).filter((p) => p.prices.length > 0);
   const sortedProducts = [...products].sort((a, b) => {
     const aPrice = a.prices[0]?.unit_amount || 0;
     const bPrice = b.prices[0]?.unit_amount || 0;
